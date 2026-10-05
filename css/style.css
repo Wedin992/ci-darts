@@ -319,3 +319,20 @@ tr.click:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); 
 @media (max-width: 380px) { .db { width: 2rem; } .g-rem b { font-size: 2.2rem; } }
 .orow.first { border-color: var(--accent); border-left-width: 5px; }
 .orow.team .nm { gap: .1rem .3rem; }
+
+/* ===== v3: allt på en skärm i mobilen, mindre och renare poängsiffror ===== */
+.g-rem b { font-family: var(--sans); font-weight: 600; font-size: 2rem; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.grow { padding: .35rem .6rem; gap: .5rem; }
+.g-name { font-size: .9rem; }
+.db { width: 2.3rem; height: 2rem; font-size: .8rem; }
+@media (min-width: 760px) { .g-rem b { font-size: 2.6rem; } }
+@media (max-width: 380px) { .g-rem b { font-size: 1.8rem; } .db { width: 2rem; } }
+
+@media (max-width: 759px) {
+  body.ingame { padding-bottom: 0; height: 100dvh; overflow: hidden; }
+  body.ingame main { height: 100dvh; display: flex; flex-direction: column; max-width: none; padding: calc(.5rem + env(safe-area-inset-top)) .6rem 0; }
+  body.ingame .gamegrid { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  body.ingame .gboards { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding: 2px; }
+  body.ingame .gright { position: static; flex: none; padding: 0 0 calc(.4rem + env(safe-area-inset-bottom)); border-top: 0; background: transparent; z-index: auto; }
+  body.ingame .gtop { margin-bottom: .35rem; flex: none; }
+}
