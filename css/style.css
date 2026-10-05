@@ -241,3 +241,81 @@ tr.click:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); 
 .hint .route i { font-style: normal; opacity: .55; margin: 0 .05rem; }
 .hint.none { background: transparent; color: var(--muted); border: 1px dashed var(--line); font-size: .85rem; }
 @media (max-width: 759px) { .hint { margin: .2rem 0; padding: .35rem .6rem; flex-wrap: nowrap; overflow-x: auto; } .hint .hl { width: auto; white-space: nowrap; } }
+
+/* ===== v2: kompakt spelvy ===== */
+.seg { display: flex; border: 1.5px solid var(--ink); border-radius: var(--radius); overflow: hidden; }
+.seg button { flex: 1; background: var(--card); border: 0; min-height: 44px; font-weight: 600; padding: 0 .5rem; }
+.seg button + button { border-left: 1.5px solid var(--ink); }
+.seg button.on { background: var(--ink); color: var(--cream); }
+.setupcard { display: grid; gap: 1.1rem; }
+.setupcard > * { margin: 0 !important; }
+.setupcard label.f { margin: 0 0 .4rem; }
+.check { display: flex; align-items: center; gap: .6rem; font-weight: 500; min-height: 44px; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+.olist { display: grid; gap: .45rem; }
+.orow { display: flex; align-items: center; gap: .6rem; background: var(--cream); border: 1.5px solid var(--line); border-radius: var(--radius); padding: .35rem .5rem; min-height: 52px; }
+.orow.dragging { border-color: var(--accent); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); background: var(--card); position: relative; z-index: 2; }
+.orow .handle { font-size: 1.6rem; line-height: 1; padding: .3rem .5rem; cursor: grab; touch-action: none; user-select: none; color: var(--muted); }
+.orow .num { font-family: var(--serif); font-size: 1.3rem; color: var(--accent); width: 1.2rem; text-align: center; }
+.orow .nm { flex: 1; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .4rem; min-width: 0; }
+.orow .amp { color: var(--muted); font-weight: 400; }
+.orow .tm { display: inline-flex; align-items: center; gap: .2rem; }
+.orow .tm.ghost { color: var(--muted); font-weight: 400; font-style: italic; }
+.orow .x { background: none; border: 0; color: var(--muted); font-size: 1rem; min-width: 32px; min-height: 36px; border-radius: var(--radius); }
+.orow .x:hover { color: var(--accent); }
+
+.gtop { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+.gtop .back { font-size: 2rem; line-height: 1; text-decoration: none; padding: 0 .6rem 0 .1rem; color: var(--accent); }
+.gtop .gmeta { flex: 1; color: var(--muted); font-size: .85rem; }
+.gboards { display: grid; gap: .45rem; align-content: start; }
+.grow { display: grid; grid-template-columns: minmax(0, 1.1fr) auto auto; align-items: center; gap: .6rem; background: var(--card); border: 1.5px solid var(--line); border-left: 6px solid var(--line); border-radius: var(--radius); padding: .45rem .7rem; }
+.grow.turn { border-color: var(--accent); border-left-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.g-rem { display: grid; line-height: 1.1; min-width: 0; }
+.g-rem b { font-family: var(--serif); font-size: 2.6rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1; }
+.grow.turn .g-rem b { color: var(--accent); }
+.g-rem b.bad { color: var(--accent); text-decoration: line-through; }
+.g-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: .95rem; }
+.g-who { font-size: .8rem; color: var(--accent); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-darts { display: grid; justify-items: center; gap: .15rem; }
+.dbs { display: flex; gap: .25rem; }
+.db { width: 2.5rem; height: 2.2rem; display: grid; place-items: center; background: var(--line); border-radius: 2px; font-weight: 600; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.db.has { background: var(--ink); color: var(--cream); }
+.db.past.has { background: color-mix(in srgb, var(--ink) 30%, var(--line)); color: var(--cream); }
+.g-total { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.1em; }
+.g-stats { display: grid; font-size: .8rem; color: var(--muted); text-align: right; gap: .1rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.g-stats b { color: var(--ink); font-size: 1.05rem; }
+.gright .hint { min-height: 2.4rem; margin: .5rem 0; }
+.gright .hint.empty-hint { visibility: hidden; }
+.keypad { background: var(--line); padding: .4rem; border-radius: var(--radius); }
+.kgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .3rem; }
+.keypad button { min-height: 50px; border: 0; border-radius: 2px; background: var(--card); font-size: 1.2rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+.keypad button:active:not(:disabled) { background: var(--accent); color: #fff; }
+.keypad button:disabled { opacity: .45; }
+.krow { display: grid; grid-template-columns: .8fr 1.5fr 1.5fr 1.2fr; gap: .3rem; margin-top: .3rem; }
+.krow button { font-size: 1rem; font-weight: 700; letter-spacing: .03em; min-height: 54px; }
+.krow .dbl { background: #f2b12c; color: #3a2a00; }
+.krow .trp { background: #e8741c; color: #fff; }
+.krow .dbl.on, .krow .trp.on { outline: 3px solid var(--ink); outline-offset: -3px; }
+.krow .kundo { background: var(--accent-dark); color: #fff; font-size: 1.5rem; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .krow .kundo { color: #1d1a18; background: var(--accent-dark); } }
+
+@media (max-width: 759px) {
+  body.ingame { padding-bottom: calc(300px + env(safe-area-inset-bottom)); }
+  body.ingame .top, body.ingame #banner, body.ingame .tabbar { display: none; }
+  body.ingame main { padding-top: calc(.6rem + env(safe-area-inset-top)); }
+  body.ingame #toast { bottom: auto; top: calc(.8rem + env(safe-area-inset-top)); }
+  body.ingame .gright { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--cream); padding: 0 .5rem calc(.5rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+  body.ingame .gright .hint { margin: .35rem 0; min-height: 2rem; flex-wrap: nowrap; overflow-x: auto; padding: .3rem .6rem; }
+  body.ingame .gright .hint .hl { width: auto; }
+  body.ingame .keypad { padding: .3rem; }
+  .keypad button { min-height: 46px; }
+  .krow button { min-height: 50px; }
+}
+@media (min-width: 760px) {
+  .gamegrid { grid-template-columns: 1.2fr 1fr; }
+  .g-rem b { font-size: 3.2rem; }
+  .keypad button { min-height: 58px; }
+}
+@media (max-width: 380px) { .db { width: 2rem; } .g-rem b { font-size: 2.2rem; } }
+.orow.first { border-color: var(--accent); border-left-width: 5px; }
+.orow.team .nm { gap: .1rem .3rem; }

@@ -1,6 +1,6 @@
 import { store, isShared } from './store.js';
 import {
-  newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon, evaluate, dartsOptions,
+  newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon,
   checkoutRoutes, currentLeg, effective, uid,
 } from './game.js';
 import { playerStats, matchSummary } from './stats.js';
@@ -22,7 +22,7 @@ function toast(msg) {
 
 const S = {
   players: [], matches: [], loaded: false, error: null,
-  setup: null, entry: '', darts: [], mult: 1, inputMode: (() => { try { return localStorage.getItem('ci-darts-input') || 'darts'; } catch { return 'darts'; } })(), modal: null, sort: 'wins', modeFilter: null, saving: false,
+  setup: null, darts: [], mult: 1, locked: false, timer: null, keybuf: '', modal: null, sort: 'wins', modeFilter: null, saving: false,
 };
 
 const playerName = (id, fallback) => S.players.find((p) => p.id === id)?.name ?? fallback ?? '?';
@@ -67,7 +67,7 @@ function route() {
   const parts = (location.hash.replace(/^#\/?/, '') || '').split('/');
   return { name: parts[0] || 'home', id: parts[1] };
 }
-window.addEventListener('hashchange', () => { S.entry = ''; S.darts = []; S.mult = 1; S.modal = null; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { clearTimeout(S.timer); S.timer = null; S.locked = false; S.darts = []; S.mult = 1; S.modal = null; render(); window.scrollTo(0, 0); });
 
 const NAV = [
   ['home', 'Start', '◉'],
@@ -86,6 +86,8 @@ function render() {
   ].map(([h, l, i, k]) => `<a href="#/${h}" class="${active === k || r.name === k ? 'on' : ''}"><b>${i}</b>${l}</a>`).join('');
   $('#banner').innerHTML = isShared ? '' : '<div class="bn">Lokalt läge – data delas inte mellan telefoner (se README)</div>';
 
+  const gm = r.name === 'match' ? getMatch(r.id) : null;
+  document.body.classList.toggle('ingame', Boolean(gm && gm.status === 'active'));
   const app = $('#app');
   if (!S.loaded) { app.innerHTML = '<p class="empty">Laddar…</p>'; }
   else if (r.name === 'ny') app.innerHTML = viewSetup();
@@ -143,63 +145,91 @@ function viewHome() {
 
 // ----- Ny match -----
 function initSetup(from) {
-  S.setup = from || { mode: 501, outRule: 'double', legsToWin: 1, format: 'solo', solo: [], teams: [[null, null], [null, null]], adding: '' };
+  S.setup = from || { mode: 501, outRule: 'double', legsToWin: 1, format: 'solo', solo: [], teams: [], adding: '', random: false };
 }
-function viewSetup() {
-  if (!S.setup) initSetup();
+const selectedIds = (u) => (u.format === 'solo' ? u.solo : u.teams.flat());
+function togglePlayer(id) {
   const u = S.setup;
-  const used = u.format === 'solo' ? u.solo : u.teams.flat().filter(Boolean);
-  const chip = (cond, attr, label) => `<button class="chip ${cond ? 'on' : ''}" ${attr}>${label}</button>`;
-  const opts = (sel) => `<option value="">Välj spelare…</option>` + S.players.map((p) => `<option value="${p.id}" ${sel === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-  const newPlayerBox = `<div class="row" style="margin-top:.8rem"><input type="text" id="newname" placeholder="Ny spelare – namn" maxlength="30" value="${esc(u.adding)}" autocomplete="off" data-enter="addplayer">
-      <button class="btn ghost sm" data-act="addplayer">Lägg till</button></div>`;
-  let who;
   if (u.format === 'solo') {
-    who = `<div class="chips">${S.players.map((p) => {
-      const i = u.solo.indexOf(p.id);
-      return `<button class="chip ${i >= 0 ? 'on' : ''}" data-act="togglesolo" data-id="${p.id}">${i >= 0 ? `<span class="n">${i + 1}</span>` : ''}${esc(p.name)}</button>`;
-    }).join('') || '<span class="muted">Inga spelare än – lägg till nedan.</span>'}</div>
-    <p class="small muted">Tryck i den ordning ni kastar. Första börjar.</p>`;
-  } else {
-    who = u.teams.map((t, ti) => `<div class="teamrow" style="margin-bottom:.5rem">
-      <select data-team="${ti}" data-slot="0" aria-label="Lag ${ti + 1} spelare 1">${opts(t[0])}</select>
-      <select data-team="${ti}" data-slot="1" aria-label="Lag ${ti + 1} spelare 2">${opts(t[1])}</select>
-      ${u.teams.length > 2 ? `<button class="btn ghost sm" data-act="rmteam" data-i="${ti}" aria-label="Ta bort lag">✕</button>` : '<span></span>'}</div>`).join('')
-      + (u.teams.length < 4 ? '<button class="btn ghost sm" data-act="addteam">+ Lägg till lag</button>' : '');
+    const i = u.solo.indexOf(id);
+    i >= 0 ? u.solo.splice(i, 1) : u.solo.push(id);
+    return;
   }
-  const ready = canStart();
-  return `<h1>Ny <i>match</i></h1>
-  <div class="card">
-    <label class="f" style="margin-top:0">Spel</label>
-    <div class="chips">${[101, 301, 501].map((n) => chip(u.mode === n, `data-act="mode" data-v="${n}"`, n)).join('')}</div>
-    <label class="f">Avslut</label>
-    <div class="chips">${chip(u.outRule === 'double', 'data-act="out" data-v="double"', 'Dubbel ut')}${chip(u.outRule === 'straight', 'data-act="out" data-v="straight"', 'Rak ut')}</div>
-    <label class="f">Antal legs (först till)</label>
-    <div class="chips">${[1, 2, 3, 4].map((n) => chip(u.legsToWin === n, `data-act="legs" data-v="${n}"`, n === 1 ? '1 leg' : n + ' legs')).join('')}</div>
-    <label class="f">Format</label>
-    <div class="chips">${chip(u.format === 'solo', 'data-act="format" data-v="solo"', 'Var och en för sig')}${chip(u.format === 'teams', 'data-act="format" data-v="teams"', 'Lag (2 + 2)')}</div>
-    <label class="f">${u.format === 'solo' ? 'Spelare' : 'Lag'}</label>
-    ${who}
-    ${newPlayerBox}
-    <div class="row" style="margin-top:1.5rem">
-      <button class="btn big grow" data-act="start" ${ready ? '' : 'disabled'}>Kör igång →</button>
-      <button class="btn ghost" data-act="shuffle" ${used.length < 2 ? 'disabled' : ''}>Slumpa ordning</button>
-    </div>
-    ${ready ? '' : `<p class="small muted">${u.format === 'solo' ? 'Välj minst två spelare.' : 'Varje lag behöver två olika spelare, och minst två lag.'}</p>`}
-  </div>`;
+  const ti = u.teams.findIndex((t) => t.includes(id));
+  if (ti >= 0) {
+    u.teams[ti] = u.teams[ti].filter((x) => x !== id);
+    if (!u.teams[ti].length) u.teams.splice(ti, 1);
+  } else {
+    const open = u.teams.find((t) => t.length < 2);
+    if (open) open.push(id);
+    else if (u.teams.length < 4) u.teams.push([id]);
+    else toast('Max fyra lag');
+  }
+}
+function setFormat(f) {
+  const u = S.setup;
+  if (f === u.format) return;
+  if (f === 'teams' && !u.teams.length) {
+    for (let i = 0; i < u.solo.length && u.teams.length < 4; i += 2) u.teams.push(u.solo.slice(i, i + 2));
+  } else if (f === 'solo' && !u.solo.length) {
+    u.solo = u.teams.flat();
+  }
+  u.format = f;
 }
 function canStart() {
   const u = S.setup;
   if (u.format === 'solo') return u.solo.length >= 2;
-  const all = u.teams.flat();
-  return u.teams.length >= 2 && all.every(Boolean) && new Set(all).size === all.length;
+  return u.teams.length >= 2 && u.teams.every((t) => t.length === 2);
+}
+function viewSetup() {
+  if (!S.setup) initSetup();
+  const u = S.setup;
+  const sel = new Set(selectedIds(u));
+  const seg = (cur, act, items) => `<div class="seg" role="group">${items.map(([v, l]) => `<button class="${cur === v ? 'on' : ''}" data-act="${act}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const pool = S.players.map((p) => `<button class="chip ${sel.has(p.id) ? 'on' : ''}" data-act="toggleplayer" data-id="${p.id}" aria-pressed="${sel.has(p.id)}">${sel.has(p.id) ? '✓ ' : ''}${esc(p.name)}</button>`).join('')
+    || '<span class="muted">Inga spelare än – lägg till den första här under.</span>';
+  let order;
+  if (u.format === 'solo') {
+    order = u.solo.length ? `<div class="olist" data-sort="solo">${u.solo.map((id, i) => `<div class="orow" data-i="${i}">
+        <span class="handle" aria-label="Dra för att flytta">≡</span><span class="num">${i + 1}</span><span class="nm">${esc(playerName(id))}</span>
+        ${i === 0 ? '<span class="pill live">Börjar</span>' : ''}
+        <button class="x" data-act="toggleplayer" data-id="${id}" aria-label="Ta bort">✕</button></div>`).join('')}</div>`
+      : '<p class="muted small">Tryck på namnen ovan för att välja vilka som spelar.</p>';
+  } else {
+    order = u.teams.length ? `<div class="olist" data-sort="teams">${u.teams.map((t, i) => `<div class="orow team ${i === 0 ? 'first' : ''}" data-i="${i}">
+        <span class="handle" aria-label="Dra för att flytta">≡</span><span class="num">${i + 1}</span>
+        <span class="nm">${t.map((id) => `<span class="tm">${esc(playerName(id))}<button class="x" data-act="toggleplayer" data-id="${id}" aria-label="Ta bort ${esc(playerName(id))}">✕</button></span>`).join('<span class="amp">&amp;</span>')}${t.length < 2 ? '<span class="tm ghost">välj en till…</span>' : ''}</span>
+        ${t.length === 2 ? `<button class="x" data-act="swapteam" data-i="${i}" aria-label="Byt kastordning i laget" title="Byt vem som kastar först">⇄</button>` : ''}</div>`).join('')}</div>
+      <p class="small muted" style="margin:.4rem 0 0">Lag 1 börjar. ⇄ byter vem i laget som kastar först.</p>`
+      : '<p class="muted small">Tryck på namnen ovan – de två första blir lag 1, nästa två lag 2 och så vidare.</p>';
+  }
+  const ready = canStart();
+  return `<h1>Ny <i>match</i></h1>
+  <div class="card stack setupcard">
+    <div class="setrow"><label class="f">Spel</label>${seg(u.mode, 'mode', [[101, '101'], [301, '301'], [501, '501']])}</div>
+    <div class="setrow"><label class="f">Avslut</label>${seg(u.outRule, 'out', [['double', 'Dubbel ut'], ['straight', 'Rak ut']])}</div>
+    <div class="setrow"><label class="f">Först till</label>${seg(u.legsToWin, 'legs', [[1, '1 leg'], [2, '2 legs'], [3, '3 legs'], [4, '4 legs']])}</div>
+    <div class="setrow"><label class="f">Format</label>${seg(u.format, 'format', [['solo', 'Var och en'], ['teams', 'Lag (2 + 2)']])}</div>
+    <div><label class="f">Vilka spelar? <span class="muted" style="text-transform:none;letter-spacing:0">Tryck för att välja</span></label>
+      <div class="chips">${pool}</div>
+      <div class="row" style="margin-top:.8rem"><input type="text" id="newname" placeholder="Ny spelare – skriv namn" maxlength="30" value="${esc(u.adding)}" autocomplete="off" data-enter="addplayer" class="grow">
+        <button class="btn ghost sm" data-act="addplayer">+ Lägg till</button></div></div>
+    <div><label class="f">${u.format === 'solo' ? 'Ordning' : 'Lag och ordning'} <span class="muted" style="text-transform:none;letter-spacing:0">Dra i ≡ för att välja vem som börjar</span></label>${order}</div>
+    <label class="check"><input type="checkbox" data-act="random" ${u.random ? 'checked' : ''}> Slumpa vem som börjar</label>
+    <button class="btn big block" data-act="start" ${ready ? '' : 'disabled'}>Kör igång →</button>
+    ${ready ? '' : `<p class="small muted" style="margin:0">${u.format === 'solo' ? 'Välj minst två spelare.' : 'Välj spelare så att det blir minst två fulla lag med två spelare i varje.'}</p>`}
+  </div>`;
 }
 function startMatch() {
   const u = S.setup;
+  const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const P = (id) => ({ id, name: playerName(id) });
-  const teams = u.format === 'solo'
-    ? u.solo.map((id) => ({ name: playerName(id), players: [P(id)] }))
-    : u.teams.map((t) => ({ name: t.map((id) => playerName(id)).join(' & '), players: t.map(P) }));
+  let teams;
+  if (u.format === 'solo') {
+    teams = (u.random ? shuffle(u.solo) : u.solo).map((id) => ({ name: playerName(id), players: [P(id)] }));
+  } else {
+    teams = (u.random ? shuffle(u.teams) : u.teams).map((t) => ({ name: t.map((id) => playerName(id)).join(' & '), players: t.map(P) }));
+  }
   const m = newMatch({ mode: u.mode, outRule: u.outRule, legsToWin: u.legsToWin, teams });
   S.setup = null;
   saveMatch(m);
@@ -219,15 +249,50 @@ async function addPlayerFromInput() {
   }
   S.players.push(p);
   S.players.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
-  if (S.setup) {
-    S.setup.adding = '';
-    if (S.setup.format === 'solo') S.setup.solo.push(p.id);
-  }
+  if (S.setup) { S.setup.adding = ''; togglePlayer(p.id); }
   toast(`${name} är tillagd`);
   render();
 }
 
+// Dra-och-släpp-sortering (mus och touch) via ≡-handtaget.
+function enableSort(e) {
+  const handle = e.target.closest('.handle');
+  if (!handle) return;
+  const item = handle.closest('.orow');
+  const list = item.parentElement;
+  e.preventDefault();
+  item.classList.add('dragging');
+  const move = (ev) => {
+    const items = [...list.children].filter((c) => c !== item);
+    const after = items.find((c) => { const r = c.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+    after ? list.insertBefore(item, after) : list.appendChild(item);
+  };
+  const up = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    document.removeEventListener('pointercancel', up);
+    item.classList.remove('dragging');
+    const order = [...list.children].map((c) => +c.dataset.i);
+    const u = S.setup, key = list.dataset.sort;
+    u[key] = order.map((i) => u[key][i]);
+    render();
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+}
+document.addEventListener('pointerdown', enableSort);
+
 // ----- Match -----
+function hintHtml(m, rem, dartsLeft) {
+  const max = m.outRule === 'double' ? 170 : 180;
+  if (rem > max || rem < 2) return '<div class="hint empty-hint"></div>';
+  const routes = checkoutRoutes(rem, dartsLeft, m.outRule);
+  if (!routes.length) return `<div class="hint none">Inget avslut på ${rem} med ${dartsLeft === 1 ? 'en pil' : dartsLeft + ' pilar'}</div>`;
+  return `<div class="hint"><span class="hl">Avslut</span>${routes.map((r) => `<span class="route">${r.join(' <i>›</i> ')}</span>`).join('')}</div>`;
+}
+const dartLabel = (n, mult) => (mult === 3 ? 'T' : mult === 2 ? 'D' : 'S') + n;
+
 function viewMatch(id) {
   const m = getMatch(id);
   if (!m) return '<p class="empty">Hittar inte matchen.</p><p class="empty"><a class="link" href="#/">Till startsidan</a></p>';
@@ -237,85 +302,68 @@ function viewMatch(id) {
   const won = legsWon(m);
   const cur = info.next;
   const curRem = info.rem[cur.team];
-  const val = S.entry === '' ? null : parseInt(S.entry, 10);
-  const ev = val == null ? null : evaluate(curRem, val, m.outRule);
-  const boards = m.teams.map((t, i) => {
+  const r = evalDarts(curRem, S.darts, m.outRule);
+  const multi = m.teams[cur.team].players.length > 1;
+  const rows = m.teams.map((t, i) => {
+    const isCur = i === cur.team;
     const turns = leg.turns.filter((x) => x.t === i);
     const pts = turns.reduce((a, x) => a + effective(x), 0);
     const d = turns.reduce((a, x) => a + x.d, 0);
-    const last = turns.slice(-3).map((x) => x.bust ? `<span class="bust">${x.s}</span>` : x.s).join(' · ');
-    return `<div class="board ${i === cur.team ? 'turn' : ''}">
-      <span class="legs" title="Vunna legs">${won[i]}</span>
-      <div class="name">${esc(t.name)}</div>
-      <div class="rem">${info.rem[i]}</div>
-      <div class="meta"><span>Snitt ${fmt1(d ? (pts / d) * 3 : 0)}</span><span>${d} pilar</span></div>
-      <div class="last">${last || '&nbsp;'}</div></div>`;
+    let boxes, total = '';
+    if (isCur) {
+      boxes = [0, 1, 2].map((k) => { const dd = S.darts[k]; return `<span class="db ${dd ? 'has' : ''}">${dd ? dd.l : ''}</span>`; }).join('');
+      total = S.darts.length ? (r.state === 'bust' ? '<s>' + r.sum + '</s> bust' : r.sum) : '';
+    } else {
+      const last = turns[turns.length - 1];
+      const ds = last?.ds || (last ? [String(last.s)] : []);
+      boxes = [0, 1, 2].map((k) => `<span class="db past ${ds[k] ? 'has' : ''}">${ds[k] ?? ''}</span>`).join('');
+      total = last ? (last.bust ? '<s>' + last.s + '</s> bust' : last.s) : '';
+    }
+    const shown = isCur ? r.left : info.rem[i];
+    return `<div class="grow ${isCur ? 'turn' : ''}">
+      <div class="g-rem"><b class="${isCur && r.state === 'bust' ? 'bad' : ''}">${shown}</b><span class="g-name">${esc(t.name)}</span>${isCur && multi ? `<span class="g-who">▸ ${esc(cur.player.name)}</span>` : ''}</div>
+      <div class="g-darts"><div class="dbs">${boxes}</div><div class="g-total">${total}</div></div>
+      <div class="g-stats"><span>Legs <b>${won[i]}</b></span><span>⌀ ${fmt1(d ? (pts / d) * 3 : 0)}</span></div></div>`;
   }).join('');
-  return `<div class="row spread"><div><span class="muted small">${modeLabel(m)} · Leg ${m.legs.length}</span></div>
-      <div class="row"><button class="btn ghost sm" data-act="undo" ${canUndo(m) ? '' : 'disabled'}>↶ Ångra</button>
-      <button class="btn ghost sm" data-act="abort" data-id="${m.id}">Avbryt match</button></div></div>
+  const hint = r.state === 'open' ? hintHtml(m, r.left, 3 - S.darts.length) : '<div class="hint empty-hint"></div>';
+  const nums = Array.from({ length: 20 }, (_, i) => i + 1).concat(25);
+  const lock = S.locked ? 'disabled' : '';
+  return `<div class="gtop"><a class="back" href="#/" aria-label="Till startsidan">‹</a>
+      <span class="gmeta">${modeLabel(m)} · Leg ${m.legs.length}</span>
+      <button class="btn ghost sm" data-act="abort" data-id="${m.id}">Avbryt</button></div>
     <div class="gamegrid">
-      <div><div class="boards" style="margin-top:.8rem">${boards}</div></div>
-      <div>
-        <div class="now"><h2>${esc(cur.player.name)}<i>s</i> tur</h2><span class="muted small">${m.teams.length > 2 || m.teams[0].players.length > 1 ? esc(m.teams[cur.team].name) : ''}</span></div>
-        ${S.inputMode === 'sum' ? hintHtml(m, curRem, 3) + sumPanel(curRem, val, ev) : dartPanel(m, curRem)}
+      <div class="gboards">${rows}</div>
+      <div class="gright">${hint}
+        <div class="keypad">
+          <div class="kgrid">${nums.map((n) => `<button data-act="dart" data-v="${n}" ${lock}>${n}</button>`).join('')}</div>
+          <div class="krow">
+            <button data-act="miss" ${lock}>0</button>
+            <button class="dbl ${S.mult === 2 ? 'on' : ''}" data-act="mult" data-v="2" ${lock}>DOUBLE</button>
+            <button class="trp ${S.mult === 3 ? 'on' : ''}" data-act="mult" data-v="3" ${lock}>TRIPLE</button>
+            <button class="kundo" data-act="kundo" aria-label="Ångra" ${canUndo(m) || S.darts.length ? '' : 'disabled'}>↶</button>
+          </div>
+        </div>
       </div></div>`;
 }
 
-
-function hintHtml(m, rem, dartsLeft) {
-  const max = m.outRule === 'double' ? 170 : 180;
-  if (rem > max || rem < 2) return '';
-  const routes = checkoutRoutes(rem, dartsLeft, m.outRule);
-  if (!routes.length) return `<div class="hint none">Inget avslut på ${rem} med ${dartsLeft === 1 ? 'en pil' : dartsLeft + ' pilar'} – sätt upp nästa runda</div>`;
-  return `<div class="hint"><span class="hl">Avslut på ${rem}</span>${routes.map((r) => `<span class="route">${r.join(' <i>›</i> ')}</span>`).join('')}</div>`;
-}
-const dartLabel = (n, mult) => (mult === 3 ? 'T' : mult === 2 ? 'D' : 'S') + n;
-function dartPanel(m, rem) {
-  const r = evalDarts(rem, S.darts, m.outRule);
-  const done = r.state !== 'open';
-  const slots = [0, 1, 2].map((i) => {
-    const d = S.darts[i];
-    return `<div class="dslot ${d ? 'has' : ''}">${d ? `<b>${d.l}</b><small>${d.v}</small>` : '<small>–</small>'}</div>`;
-  }).join('');
-  const msg = r.state === 'bust' ? '<span class="bad">Bust – rundan räknas inte</span>'
-    : r.state === 'checkout' ? '<span class="good">Avslut! 🎯</span>'
-    : `Kvar efter rundan: <b>${r.left}</b>`;
-  const mult = [[1, 'Singel'], [2, 'Dubbel'], [3, 'Trippel']].map(([k, l]) =>
-    `<button class="${S.mult === k ? 'on' : ''}" data-act="mult" data-v="${k}" ${done ? 'disabled' : ''}>${l}</button>`).join('');
-  const nums = Array.from({ length: 20 }, (_, i) => i + 1).map((n) =>
-    `<button data-act="dart" data-v="${n}" ${done ? 'disabled' : ''}>${n}</button>`).join('');
-  const hint = r.state === 'open' ? hintHtml(m, r.left, 3 - S.darts.length) : '';
-  return `<div class="dslots">${slots}</div>
-    <div class="dmsg">${msg}</div>${hint}
-    <div class="mult" role="group" aria-label="Singel, dubbel eller trippel">${mult}</div>
-    <div class="dgrid">${nums}</div>
-    <div class="dspecial">
-      <button data-act="dart25" ${done ? 'disabled' : ''}>25</button>
-      <button data-act="bull" ${done ? 'disabled' : ''}>Bull 50</button>
-      <button data-act="miss" ${done ? 'disabled' : ''}>Miss</button></div>
-    <div class="dactions">
-      <button class="ghostb" data-act="dback" ${S.darts.length ? '' : 'disabled'} aria-label="Ta bort senaste pilen">⌫ Ta bort pil</button>
-      <button class="ok" data-act="dok" ${done ? '' : 'disabled'}>${S.darts.length && !done ? 'Fyll i 3 pilar' : 'OK'}</button></div>
-    <p class="small muted" style="text-align:center"><button class="link" data-act="inputmode" data-v="sum">Skriv in summan istället</button></p>`;
-}
-function sumPanel(curRem, val, ev) {
-  const quick = [26, 41, 45, 60, 81, 85, 100, 121, 140, 180];
-  return `<div class="entry ${ev === 'invalid' ? 'err' : ''}"><small>${ev === 'invalid' ? 'Går inte att kasta' : ev === 'bust' ? 'Bust – 0 poäng' : 'Summa 3 pilar'}</small><span>${S.entry || '0'}</span></div>
-        <div class="quick">${quick.map((q) => `<button data-act="quick" data-v="${q}">${q}</button>`).join('')}<button class="zero" data-act="quick" data-v="0">0 / bust</button></div>
-        <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button data-act="digit" data-v="${n}">${n}</button>`).join('')}
-          <button data-act="back" aria-label="Radera">⌫</button><button data-act="digit" data-v="0">0</button>
-          <button class="ok" data-act="submit" ${val == null || ev === 'invalid' ? 'disabled' : ''}>OK</button></div>
-        <p class="small muted" style="text-align:center"><button class="link" data-act="inputmode" data-v="darts">Mata in pil för pil istället</button></p>`;
-}
-function addDart(v, mult, base) {
+function addDart(base) {
   const m = getMatch(route().id);
-  if (!m || m.status !== 'active') return;
+  if (!m || m.status !== 'active' || S.locked) return;
   const info = legInfo(m);
   if (evalDarts(info.rem[info.next.team], S.darts, m.outRule).state !== 'open') return;
-  const l = base === 'bull' ? 'Bull' : base === 'miss' ? 'Miss' : dartLabel(base, mult);
-  S.darts.push({ v, dbl: base === 'bull' || mult === 2, l: base === 'miss' ? 'Miss' : l });
+  let dart;
+  if (base === 0) dart = { v: 0, dbl: false, l: 'Miss' };
+  else if (base === 25) dart = S.mult === 2 ? { v: 50, dbl: true, l: 'Bull' } : { v: 25, dbl: false, l: '25' };
+  else dart = { v: base * S.mult, dbl: S.mult === 2, l: dartLabel(base, S.mult) };
+  S.darts.push(dart);
   S.mult = 1;
+  const r = evalDarts(info.rem[info.next.team], S.darts, m.outRule);
+  if (r.state !== 'open') {
+    // Visa sista pilen en kort stund, byt sedan automatiskt till nästa spelare. Ångra hinner avbryta.
+    S.locked = true;
+    S.timer = setTimeout(() => { S.timer = null; S.locked = false; submitDarts(); }, 650);
+  }
+  render();
 }
 function submitDarts() {
   const m = getMatch(route().id);
@@ -329,19 +377,11 @@ function submitDarts() {
   else if (r.state === 'bust') { commit(applyTurn(m, 'bust', r.sum, 3, ds)); toast('Bust!'); }
   else commit(applyTurn(m, 'ok', r.sum, 3, ds));
 }
-
-function submitScore() {
+function undoDart() {
   const m = getMatch(route().id);
-  if (!m || m.status !== 'active' || S.entry === '') return;
-  const s = parseInt(S.entry, 10);
-  const info = legInfo(m);
-  const rem = info.rem[info.next.team];
-  const ev = evaluate(rem, s, m.outRule);
-  if (ev === 'invalid') return;
-  S.entry = '';
-  if (ev === 'checkout') { S.modal = { type: 'checkout', s, rem }; render(); return; }
-  commit(applyTurn(m, ev === 'bust' ? 'bust' : 'ok', s));
-  if (ev === 'bust') toast('Bust!');
+  if (S.timer) { clearTimeout(S.timer); S.timer = null; S.locked = false; S.darts.pop(); return; }
+  if (S.darts.length) { S.darts.pop(); return; }
+  if (m && canUndo(m)) { saveMatch(undo(m)); toast('Senaste rundan ångrad'); }
 }
 function commit(next) {
   const wasLeg = legsWon(getMatch(next.id));
@@ -350,25 +390,7 @@ function commit(next) {
   if (next.status === 'finished') toast('Match avgjord!');
   else if (nowLeg.some((v, i) => v > wasLeg[i])) toast('Leg vunnet!');
 }
-
-function renderModal() {
-  const el = $('#modal');
-  const mo = S.modal;
-  if (!mo) { el.innerHTML = ''; return; }
-  const m = getMatch(route().id);
-  if (mo.type === 'checkout' && m) {
-    const opts = dartsOptions(mo.rem, m.outRule);
-    el.innerHTML = `<div class="overlay" data-act="closemodal"><div class="dialog" role="dialog" aria-modal="true">
-      <h2>Avslut på ${mo.s}!</h2>
-      <p class="muted">${m.outRule === 'double' ? 'Hur många pilar behövdes, med sista på dubbel?' : 'Hur många pilar behövdes?'}</p>
-      <div class="bigbtns">${[1, 2, 3].map((n) => `<button class="btn" data-act="checkout" data-v="${n}" ${opts.includes(n) ? '' : 'disabled'}>${n}</button>`).join('')}</div>
-      <div class="row spread">${m.outRule === 'double' ? '<button class="btn ghost" data-act="nodouble">Ingen dubbel (bust)</button>' : '<span></span>'}
-      <button class="link" data-act="closemodal">Avbryt</button></div></div></div>`;
-  } else if (mo.type === 'rename') {
-    el.innerHTML = '';
-  }
-  el.querySelector('button:not(:disabled)')?.focus?.();
-}
+function renderModal() { $('#modal').innerHTML = ''; }
 
 function viewMatchDone(m) {
   const w = legsWon(m);
@@ -474,48 +496,20 @@ document.addEventListener('click', async (e) => {
     case 'mode': u.mode = +v; break;
     case 'out': u.outRule = v; break;
     case 'legs': u.legsToWin = +v; break;
-    case 'format': u.format = v; break;
-    case 'togglesolo': { const i = u.solo.indexOf(el.dataset.id); i >= 0 ? u.solo.splice(i, 1) : u.solo.push(el.dataset.id); break; }
-    case 'addteam': u.teams.push([null, null]); break;
-    case 'rmteam': u.teams.splice(+el.dataset.i, 1); break;
-    case 'shuffle':
-      if (u.format === 'solo') u.solo.sort(() => Math.random() - 0.5); else u.teams.sort(() => Math.random() - 0.5);
-      toast('Ordningen är slumpad'); break;
+    case 'format': setFormat(v); break;
+    case 'toggleplayer': togglePlayer(el.dataset.id); break;
+    case 'swapteam': u.teams[+el.dataset.i].reverse(); break;
     case 'addplayer': await addPlayerFromInput(); return;
     case 'start': if (canStart()) startMatch(); return;
-    case 'mult': S.mult = +v; break;
-    case 'dart': addDart(+v * S.mult, S.mult, +v); break;
-    case 'dart25': addDart(25, 1, 25); break;
-    case 'bull': addDart(50, 2, 'bull'); break;
-    case 'miss': addDart(0, 1, 'miss'); break;
-    case 'dback': S.darts.pop(); break;
-    case 'dok': submitDarts(); return;
-    case 'inputmode':
-      S.inputMode = v; S.entry = ''; S.darts = [];
-      try { localStorage.setItem('ci-darts-input', v); } catch {}
-      break;
-    case 'digit': if (S.entry.length < 3) S.entry = (S.entry + v).replace(/^0+(?=\d)/, ''); break;
-    case 'back': S.entry = S.entry.slice(0, -1); break;
-    case 'quick': S.entry = v; submitScore(); return;
-    case 'submit': submitScore(); return;
+    case 'mult': S.mult = S.mult === +v ? 1 : +v; break;
+    case 'dart': addDart(+v); return;
+    case 'miss': addDart(0); return;
+    case 'kundo': undoDart(); break;
     case 'undo': {
       const m = getMatch(route().id);
-      if (m && canUndo(m)) { S.entry = ''; S.darts = []; saveMatch(undo(m)); toast('Senaste kastet ångrat'); return; }
+      if (m && canUndo(m)) { S.darts = []; saveMatch(undo(m)); toast('Senaste rundan ångrad'); return; }
       break;
     }
-    case 'checkout': {
-      const m = getMatch(route().id);
-      const { s } = S.modal; S.modal = null;
-      commit(applyTurn(m, 'checkout', s, +v)); return;
-    }
-    case 'nodouble': {
-      const m = getMatch(route().id);
-      const { s } = S.modal; S.modal = null;
-      commit(applyTurn(m, 'bust', s)); toast('Ingen dubbel – bust'); return;
-    }
-    case 'closemodal':
-      if (el.classList.contains('overlay') && e.target !== el) return; // klick inne i dialogen
-      S.modal = null; break;
     case 'abort': case 'delete':
       if (confirm(a === 'abort' ? 'Avbryta och ta bort den här matchen?' : 'Ta bort matchen och dess statistik för alla?')) {
         const id = el.dataset.id;
@@ -528,7 +522,7 @@ document.addEventListener('click', async (e) => {
       const ids = m.teams.map((t) => t.players.map((p) => p.id));
       const solo = m.teams.every((t) => t.players.length === 1);
       const rot = (arr) => [...arr.slice(1), arr[0]];
-      initSetup({ mode: m.mode, outRule: m.outRule, legsToWin: m.legsToWin, format: solo ? 'solo' : 'teams', solo: solo ? rot(ids.flat()) : [], teams: solo ? [[null, null], [null, null]] : rot(ids), adding: '' });
+      initSetup({ mode: m.mode, outRule: m.outRule, legsToWin: m.legsToWin, format: solo ? 'solo' : 'teams', solo: solo ? rot(ids.flat()) : [], teams: solo ? [] : rot(ids), adding: '', random: false });
       location.hash = '#/ny'; return;
     }
     case 'modefilter': S.modeFilter = v ? +v : null; break;
@@ -547,23 +541,34 @@ document.addEventListener('click', async (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.dataset?.act === 'random') { S.setup.random = e.target.checked; return; }
   const sel = e.target.closest('select');
   if (!sel) return;
-  if (sel.dataset.team != null) { S.setup.teams[+sel.dataset.team][+sel.dataset.slot] = sel.value || null; render(); }
-  else if (sel.dataset.filter) { S[sel.dataset.filter] = sel.value; render(); }
+  if (sel.dataset.filter) { S[sel.dataset.filter] = sel.value; render(); }
 });
 document.addEventListener('input', (e) => {
   if (e.target.id === 'newname' && S.setup) S.setup.adding = e.target.value;
 });
 document.addEventListener('keydown', (e) => {
   if (e.target.dataset?.enter === 'addplayer' && e.key === 'Enter') { addPlayerFromInput(); return; }
-  if (route().name !== 'match' || S.modal || ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (route().name !== 'match' || ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) || e.metaKey || e.ctrlKey) return;
   const m = getMatch(route().id);
   if (!m || m.status !== 'active') return;
-  if (S.inputMode !== 'sum') { if (e.key === 'Enter') submitDarts(); else if (e.key === 'Backspace') S.darts.pop(); else return; render(); return; }
-  if (/^\d$/.test(e.key) && S.entry.length < 3) S.entry = (S.entry + e.key).replace(/^0+(?=\d)/, '');
-  else if (e.key === 'Backspace') S.entry = S.entry.slice(0, -1);
-  else if (e.key === 'Enter') { submitScore(); return; }
+  // Dator: siffror (1–20), d = dubbel, t = trippel, b = bull, 0 = miss, Backspace = ångra
+  const flush = () => { clearTimeout(S.keyTimer); const n = S.keybuf; S.keybuf = ''; if (n) addDart(+n); };
+  if (/^\d$/.test(e.key)) {
+    const next = (S.keybuf || '') + e.key;
+    if (+next > 20) { S.keybuf = ''; clearTimeout(S.keyTimer); return; }
+    S.keybuf = next;
+    clearTimeout(S.keyTimer);
+    if (+next >= 3 || next === '0' || +next * 10 > 20) flush(); else S.keyTimer = setTimeout(flush, 500);
+    return;
+  }
+  if (e.key === 'Enter') { flush(); return; }
+  if (e.key === 'd') S.mult = S.mult === 2 ? 1 : 2;
+  else if (e.key === 't') S.mult = S.mult === 3 ? 1 : 3;
+  else if (e.key === 'b') { S.mult = 2; addDart(25); return; }
+  else if (e.key === 'Backspace') undoDart();
   else return;
   render();
 });
