@@ -79,3 +79,13 @@ export function matchSummary(m) {
     return { avg: d ? (p / d) * 3 : 0, high: h, n180 };
   });
 }
+
+/** Träffar (pil-etikett -> antal) i en enskild match, för en spelare eller alla (pid = null). */
+export function matchHits(m, pid = null) {
+  const out = { hits: {}, dartsTracked: 0 };
+  for (const leg of m.legs) for (const t of leg.turns) {
+    if (pid && t.p !== pid) continue;
+    for (const l of t.ds || []) { out.hits[l] = (out.hits[l] || 0) + 1; out.dartsTracked++; }
+  }
+  return out;
+}

@@ -3,7 +3,7 @@ import {
   newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon,
   checkoutRoutes, currentLeg, effective, uid, specialVisit,
 } from './game.js';
-import { playerStats, matchSummary } from './stats.js';
+import { playerStats, matchSummary, matchHits } from './stats.js';
 
 // ---------- hjälpare ----------
 const $ = (s) => document.querySelector(s);
@@ -22,7 +22,7 @@ function toast(msg) {
 
 const S = {
   players: [], matches: [], loaded: false, error: null,
-  setup: null, trendMetric: 'avg', trendRange: 30, darts: [], mult: 1, locked: false, timer: null, keybuf: '', modal: null, sort: 'wins', modeFilter: null, saving: false,
+  setup: null, matchHeat: 'all', trendMetric: 'avg', trendRange: 30, darts: [], mult: 1, locked: false, timer: null, keybuf: '', modal: null, sort: 'wins', modeFilter: null, saving: false,
 };
 
 const playerName = (id, fallback) => S.players.find((p) => p.id === id)?.name ?? fallback ?? '?';
@@ -67,7 +67,7 @@ function route() {
   const parts = (location.hash.replace(/^#\/?/, '') || '').split('/');
   return { name: parts[0] || 'home', id: parts[1] };
 }
-window.addEventListener('hashchange', () => { clearTimeout(S.timer); S.timer = null; S.locked = false; S.darts = []; S.mult = 1; S.modal = null; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { S.matchHeat = 'all'; clearTimeout(S.timer); S.timer = null; S.locked = false; S.darts = []; S.mult = 1; S.modal = null; render(); window.scrollTo(0, 0); });
 
 const NAV = [
   ['home', 'Start', '◉'],
@@ -397,6 +397,15 @@ function commit(next) {
 }
 function renderModal() { $('#modal').innerHTML = ''; }
 
+function matchHeatCard(m) {
+  const people = [...new Map(m.teams.flatMap((t) => t.players).map((p) => [p.id, p])).values()];
+  const sel = S.matchHeat === 'all' || !people.some((p) => p.id === S.matchHeat) ? 'all' : S.matchHeat;
+  const chips = [['all', 'Alla'], ...people.map((p) => [p.id, playerName(p.id, p.name)])]
+    .map(([v, l]) => `<button class="chip sm ${sel === v ? 'on' : ''}" data-act="matchheat" data-v="${v}">${esc(l)}</button>`).join('');
+  const data = matchHits(m, sel === 'all' ? null : sel);
+  return `<div class="card" style="margin-top:1.2rem"><h3>Heatmap – var pilarna landade i matchen</h3>
+    ${people.length > 1 ? `<div class="chips" style="margin-bottom:.8rem">${chips}</div>` : ''}${heatmapCard(data)}</div>`;
+}
 function viewMatchDone(m) {
   const w = legsWon(m);
   const sum = matchSummary(m);
@@ -422,6 +431,7 @@ function viewMatchDone(m) {
       <button class="btn ghost" data-act="delete" data-id="${m.id}">Ta bort match</button></div>
     <div class="card tablewrap"><table><thead><tr><th>Lag</th><th class="num">Legs</th><th class="num">Snitt</th><th class="num">Högsta</th><th class="num">180</th></tr></thead><tbody>
       ${m.teams.map((t, i) => `<tr><td>${esc(t.name)}</td><td class="num">${w[i]}</td><td class="num">${fmt1(sum[i].avg)}</td><td class="num">${sum[i].high}</td><td class="num">${sum[i].n180}</td></tr>`).join('')}</tbody></table></div>
+    ${matchHeatCard(m)}
     <h2 style="margin-top:1.5rem">Kast för kast</h2><div class="card stack">${legs}</div>`;
 }
 
@@ -613,6 +623,7 @@ document.addEventListener('click', async (e) => {
       initSetup({ mode: m.mode, outRule: m.outRule, legsToWin: m.legsToWin, format: solo ? 'solo' : 'teams', solo: solo ? rot(ids.flat()) : [], teams: solo ? [] : rot(ids), adding: '', random: false });
       location.hash = '#/ny'; return;
     }
+    case 'matchheat': S.matchHeat = v; break;
     case 'trendmetric': S.trendMetric = v; break;
     case 'trendrange': S.trendRange = +v; break;
     case 'modefilter': S.modeFilter = v ? +v : null; break;
