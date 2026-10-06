@@ -336,3 +336,35 @@ tr.click:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); 
   body.ingame .gright { position: static; flex: none; padding: 0 0 calc(.4rem + env(safe-area-inset-bottom)); border-top: 0; background: transparent; z-index: auto; }
   body.ingame .gtop { margin-bottom: .35rem; flex: none; }
 }
+
+/* ===== v4: större avslutsförslag, trend, heatmap ===== */
+.hint { padding: .5rem .7rem; gap: .5rem .6rem; }
+.hint .hl { font-size: .75rem; }
+.hint .route { font-size: 1.2rem; padding: .35rem .8rem; background: var(--card); color: var(--ink); border-radius: var(--radius); display: inline-flex; align-items: center; gap: .35rem; }
+.hint .route i { font-style: normal; color: var(--muted); }
+.hint .route b { font-weight: 700; padding: .05rem .4rem; border-radius: 2px; }
+.hint .route b.kT { background: #e8741c; color: #fff; }
+.hint .route b.kD { background: #f2b12c; color: #3a2a00; }
+.hint .route b.kB { background: var(--accent-dark); color: #fff; }
+.hint .route b.kS { background: var(--line); color: var(--ink); }
+.hint.none { font-size: .95rem; padding: .6rem .8rem; }
+.gright .hint { min-height: 3.2rem; }
+.chip.sm { min-height: 34px; padding: .25rem .8rem; font-size: .9rem; }
+svg.trend { width: 100%; height: auto; display: block; }
+svg.trend .ax { font: 11px var(--sans); fill: var(--muted); }
+.trendnote { margin: 0 0 .4rem; }
+.trendnote .up { color: var(--good); font-weight: 600; } .trendnote .down { color: var(--accent); font-weight: 600; }
+.heatwrap { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: .8rem; align-items: center; }
+.board-svg { width: 100%; height: auto; display: block; }
+.board-svg .bn { font: 600 15px var(--sans); fill: var(--ink); }
+.heatside .big { font-family: var(--serif); font-size: 2rem; line-height: 1.1; }
+.toplist { margin: .2rem 0 0; padding: 0; list-style: none; font-size: .9rem; }
+.toplist li { display: flex; justify-content: space-between; gap: .4rem; padding: .15rem 0; border-bottom: 1px solid var(--line); }
+.legend { display: flex; align-items: center; gap: .5rem; font-size: .75rem; color: var(--muted); margin-top: .6rem; }
+.legend i { flex: 1; max-width: 160px; height: 8px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 15%, transparent), var(--accent)); border-radius: 4px; }
+b.sp { color: var(--accent); }
+@media (max-width: 500px) { .heatwrap { grid-template-columns: 1fr; } .hint .route { font-size: 1.1rem; padding: .3rem .6rem; } }
+@media (max-width: 759px) {
+  body.ingame .gright .hint { flex-wrap: wrap; overflow: visible; }
+  body.ingame .gright .hint .hl { width: 100%; }
+}

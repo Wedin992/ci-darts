@@ -1,5 +1,5 @@
 // Cachar appskalet så att appen startar direkt och även utan nät. Data hämtas alltid från nätet.
-const CACHE = 'ci-darts-v4';
+const CACHE = 'ci-darts-v6';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/game.js', 'js/stats.js', 'js/store.js', 'js/config.js', 'icons/icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {

@@ -234,3 +234,17 @@ export function checkoutRoutes(rem, dartsLeft, outRule, max = 3) {
   }
   return out.sort((a, b) => a.length - b.length);
 }
+
+/**
+ * Tröja = 20, 5 och 1 i samma runda. Byxa = 19, 7 och 3. Valfri ordning och valfri ring (S/D/T).
+ * ds = pilarnas etiketter, t.ex. ['S20','S5','S1'].
+ */
+export function specialVisit(ds) {
+  if (!ds || ds.length !== 3) return null;
+  const nums = ds.map((l) => (/^[SDT]\d+$/.test(l) ? +l.slice(1) : null));
+  if (nums.includes(null)) return null;
+  const k = nums.sort((a, b) => a - b).join();
+  if (k === '1,5,20') return 'tröja';
+  if (k === '3,7,19') return 'byxa';
+  return null;
+}

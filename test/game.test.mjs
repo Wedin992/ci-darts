@@ -104,3 +104,20 @@ for (let r = 2; r <= 170; r++) {
   }
 }
 console.log('avslutsförslag OK');
+import { specialVisit } from '../js/game.js';
+assert.equal(specialVisit(['S20', 'S5', 'S1']), 'tröja');
+assert.equal(specialVisit(['S1', 'T20', 'S5']), 'tröja');
+assert.equal(specialVisit(['S3', 'S19', 'D7']), 'byxa');
+assert.equal(specialVisit(['S20', 'S5']), null);
+assert.equal(specialVisit(['S20', 'S5', 'Miss']), null);
+assert.equal(specialVisit(['S20', 'S5', '25']), null);
+// övning: en ensam spelare
+let solo = newMatch({ mode: 101, outRule: 'double', legsToWin: 1, teams: [{ name: 'Anna', players: [A] }] });
+solo = applyTurn(solo, 'ok', 60, 3, ['T20', 'S20', 'Miss']);
+solo = applyTurn(solo, 'checkout', 41, 2, ['S1', 'D20']);
+assert.equal(solo.status, 'finished');
+const ps = playerStats('a', [solo]);
+assert.equal(ps.matches, 0); assert.equal(ps.wins, 0); assert.equal(ps.practice, 1);
+assert.equal(ps.hits.D20, 1); assert.equal(ps.hits.Miss, 1); assert.equal(ps.dartsTracked, 5);
+assert.ok(ps.avg > 0);
+console.log('tröja/byxa + övning OK');

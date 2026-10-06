@@ -1,7 +1,7 @@
 import { store, isShared } from './store.js';
 import {
   newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon,
-  checkoutRoutes, currentLeg, effective, uid,
+  checkoutRoutes, currentLeg, effective, uid, specialVisit,
 } from './game.js';
 import { playerStats, matchSummary } from './stats.js';
 
@@ -22,7 +22,7 @@ function toast(msg) {
 
 const S = {
   players: [], matches: [], loaded: false, error: null,
-  setup: null, darts: [], mult: 1, locked: false, timer: null, keybuf: '', modal: null, sort: 'wins', modeFilter: null, saving: false,
+  setup: null, trendMetric: 'avg', trendRange: 30, darts: [], mult: 1, locked: false, timer: null, keybuf: '', modal: null, sort: 'wins', modeFilter: null, saving: false,
 };
 
 const playerName = (id, fallback) => S.players.find((p) => p.id === id)?.name ?? fallback ?? '?';
@@ -100,6 +100,7 @@ function render() {
 }
 
 function matchTitle(m) {
+  if (m.teams.length === 1) return `${esc(m.teams[0].name)} <b>·</b> övning`;
   return m.teams.map((t) => esc(t.name)).join(' <b>vs</b> ');
 }
 function modeLabel(m) {
@@ -111,7 +112,7 @@ function matchCard(m) {
   const score = m.teams.map((_, i) => w[i]).join(' – ');
   return `<a class="mcard ${live ? 'live' : ''}" href="#/match/${m.id}">
     <div class="row spread"><span class="vs">${matchTitle(m)}</span>
-      ${live ? '<span class="pill live">Pågår</span>' : `<span class="pill ${'win'}">${esc(m.teams[m.winner]?.name ?? '')} vann</span>`}</div>
+      ${live ? '<span class="pill live">Pågår</span>' : m.teams.length === 1 ? '<span class="pill">Övning</span>' : `<span class="pill win">${esc(m.teams[m.winner]?.name ?? '')} vann</span>`}</div>
     <div class="row spread small muted"><span>${modeLabel(m)}</span><span>${live ? 'Leg ' + m.legs.length + ' · ' : ''}${score} · ${fmtDate(m.finished_at || m.created_at)}</span></div>
   </a>`;
 }
@@ -178,7 +179,7 @@ function setFormat(f) {
 }
 function canStart() {
   const u = S.setup;
-  if (u.format === 'solo') return u.solo.length >= 2;
+  if (u.format === 'solo') return u.solo.length >= 1;
   return u.teams.length >= 2 && u.teams.every((t) => t.length === 2);
 }
 function viewSetup() {
@@ -215,9 +216,10 @@ function viewSetup() {
       <div class="row" style="margin-top:.8rem"><input type="text" id="newname" placeholder="Ny spelare – skriv namn" maxlength="30" value="${esc(u.adding)}" autocomplete="off" data-enter="addplayer" class="grow">
         <button class="btn ghost sm" data-act="addplayer">+ Lägg till</button></div></div>
     <div><label class="f">${u.format === 'solo' ? 'Ordning' : 'Lag och ordning'} <span class="muted" style="text-transform:none;letter-spacing:0">Dra i ≡ för att välja vem som börjar</span></label>${order}</div>
+    ${u.format === 'solo' && u.solo.length === 1 ? '<p class="small" style="margin:0;color:var(--accent);font-weight:600">Ensam spelare = övning. Räknas inte som vinst/förlust, men snitt och träffar sparas.</p>' : ''}
     <label class="check"><input type="checkbox" data-act="random" ${u.random ? 'checked' : ''}> Slumpa vem som börjar</label>
     <button class="btn big block" data-act="start" ${ready ? '' : 'disabled'}>Kör igång →</button>
-    ${ready ? '' : `<p class="small muted" style="margin:0">${u.format === 'solo' ? 'Välj minst två spelare.' : 'Välj spelare så att det blir minst två fulla lag med två spelare i varje.'}</p>`}
+    ${ready ? '' : `<p class="small muted" style="margin:0">${u.format === 'solo' ? 'Välj minst en spelare.' : 'Välj spelare så att det blir minst två fulla lag med två spelare i varje.'}</p>`}
   </div>`;
 }
 function startMatch() {
@@ -289,7 +291,8 @@ function hintHtml(m, rem, dartsLeft) {
   if (rem > max || rem < 2) return '<div class="hint empty-hint"></div>';
   const routes = checkoutRoutes(rem, dartsLeft, m.outRule);
   if (!routes.length) return `<div class="hint none">Inget avslut på ${rem} med ${dartsLeft === 1 ? 'en pil' : dartsLeft + ' pilar'}</div>`;
-  return `<div class="hint"><span class="hl">Avslut</span>${routes.map((r) => `<span class="route">${r.join(' <i>›</i> ')}</span>`).join('')}</div>`;
+  const lab = (l) => `<b class="k${l === 'Bull' ? 'B' : /^\d/.test(l) ? 'S' : l[0]}">${l}</b>`;
+  return `<div class="hint"><span class="hl">Avslut på ${rem}</span>${routes.map((r) => `<span class="route">${r.map(lab).join('<i>›</i>')}</span>`).join('')}</div>`;
 }
 const dartLabel = (n, mult) => (mult === 3 ? 'T' : mult === 2 ? 'D' : 'S') + n;
 
@@ -376,6 +379,8 @@ function submitDarts() {
   if (r.state === 'checkout') commit(applyTurn(m, 'checkout', r.sum, r.n, ds));
   else if (r.state === 'bust') { commit(applyTurn(m, 'bust', r.sum, 3, ds)); toast('Bust!'); }
   else commit(applyTurn(m, 'ok', r.sum, 3, ds));
+  const sp = specialVisit(ds);
+  if (sp) toast(sp === 'tröja' ? '👕 TRÖJA! 20 · 5 · 1' : '👖 BYXA! 19 · 7 · 3');
 }
 function undoDart() {
   const m = getMatch(route().id);
@@ -402,12 +407,14 @@ function viewMatchDone(m) {
     const rows = leg.turns.map((t) => {
       if (t.co) rem[t.t] = 0; else if (!t.bust) rem[t.t] -= t.s;
       const who = m.teams[t.t].players.find((p) => p.id === t.p);
-      return `<tr><td>${esc(playerName(t.p, who?.name))}${t.ds ? `<div class="small muted">${t.ds.join(' · ')}</div>` : ''}</td><td class="num ${t.bust ? 'muted' : ''}">${t.bust ? `<s>${t.s}</s> bust` : t.s}</td><td class="num">${rem[t.t]}</td></tr>`;
+      return `<tr><td>${esc(playerName(t.p, who?.name))}${t.ds ? `<div class="small muted">${t.ds.join(' · ')}${specialVisit(t.ds) ? ` <b class="sp">${specialVisit(t.ds) === 'tröja' ? '👕 tröja' : '👖 byxa'}</b>` : ''}</div>` : ''}</td><td class="num ${t.bust ? 'muted' : ''}">${t.bust ? `<s>${t.s}</s> bust` : t.s}</td><td class="num">${rem[t.t]}</td></tr>`;
     }).join('');
     return `<details ${li === m.legs.length - 1 ? 'open' : ''}><summary><b>Leg ${li + 1}</b> – ${leg.winner != null ? esc(m.teams[leg.winner].name) + ' vann' : 'ej klart'}</summary>
       <table class="turns"><thead><tr><th>Spelare</th><th class="num">Poäng</th><th class="num">Kvar</th></tr></thead><tbody>${rows}</tbody></table></details>`;
   }).join('');
-  return `<div class="winbanner"><h2>${esc(winner.name)} vann!</h2><div>${m.teams.map((t, i) => `${esc(t.name)} ${w[i]}`).join(' – ')} · ${modeLabel(m)}</div>
+  const practice = m.teams.length === 1;
+  const totalDarts = m.legs.reduce((a, l) => a + l.turns.reduce((b, t) => b + t.d, 0), 0);
+  return `<div class="winbanner"><h2>${practice ? `Klart, ${esc(winner.name)}!` : `${esc(winner.name)} vann!`}</h2><div>${practice ? `${m.mode} avklarat på ${totalDarts} pilar · snitt ${fmt1(sum[0].avg)}` : `${m.teams.map((t, i) => `${esc(t.name)} ${w[i]}`).join(' – ')} · ${modeLabel(m)}`}</div>
       <div class="small" style="opacity:.85;margin-top:.3rem">${fmtDate(m.finished_at || m.created_at)}</div></div>
     <div class="row" style="margin:1rem 0">
       <button class="btn" data-act="rematch" data-id="${m.id}">Spela igen</button>
@@ -450,18 +457,97 @@ function viewPlayers() {
     </tbody></table></div>
     <div class="card" style="margin-top:1rem"><h3>Ny spelare</h3><div class="row"><input type="text" id="newname" placeholder="Namn" maxlength="30" autocomplete="off" data-enter="addplayer"><button class="btn" data-act="addplayer">Lägg till</button></div></div>`;
 }
-function sparkline(form) {
-  if (form.length < 2) return '<p class="muted small">Spela fler matcher för att se formkurvan.</p>';
-  const pts = form.slice(-20);
-  const max = Math.max(...pts.map((f) => f.avg), 1), min = Math.min(...pts.map((f) => f.avg));
-  const W = 400, H = 90, pad = 8;
-  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
-  const y = (v) => H - pad - ((v - min) / Math.max(max - min, 1)) * (H - 2 * pad);
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Snitt per match">
-    <polyline fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" points="${pts.map((f, i) => `${x(i)},${y(f.avg)}`).join(' ')}"/>
-    ${pts.map((f, i) => `<circle cx="${x(i)}" cy="${y(f.avg)}" r="3.5" fill="${f.won ? 'var(--accent)' : 'var(--card)'}" stroke="var(--accent)" stroke-width="1.5"><title>${fmt1(f.avg)} – ${f.won ? 'vinst' : 'förlust'}</title></circle>`).join('')}</svg>
-    <p class="muted small">Snitt per match, senaste ${pts.length}. Fylld prick = vinst.</p>`;
+// ----- Trend över tid -----
+function trendSeries(form, metric) {
+  const base = metric === 'avg' ? form : form.filter((f) => f.won !== null);
+  const val = base.map((f) => (metric === 'avg' ? f.avg : f.won ? 100 : 0));
+  const w = metric === 'avg' ? 5 : 10;
+  return base.map((f, i) => {
+    const win = val.slice(Math.max(0, i - w + 1), i + 1);
+    return { f, v: val[i], ma: win.reduce((a, b) => a + b, 0) / win.length };
+  });
 }
+function trendChart(form) {
+  const metric = S.trendMetric, range = S.trendRange;
+  const all = trendSeries(form, metric);
+  const pts = range ? all.slice(-range) : all;
+  const chips = (cur, act, items) => `<div class="chips">${items.map(([v, l]) => `<button class="chip sm ${cur === v ? 'on' : ''}" data-act="${act}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const controls = `<div class="row spread" style="margin-bottom:.6rem">${chips(metric, 'trendmetric', [['avg', '3-pilssnitt'], ['win', 'Vinst-%']])}${chips(range, 'trendrange', [[10, '10'], [30, '30'], [0, 'Alla']])}</div>`;
+  if (pts.length < 2) return controls + '<p class="muted">Spela minst två matcher för att se utvecklingen.</p>';
+  const W = 640, H = 230, L = 38, R = 12, T = 14, B = 28;
+  let lo, hi;
+  if (metric === 'win') { lo = 0; hi = 100; }
+  else {
+    const vs = pts.flatMap((p) => [p.v, p.ma]);
+    lo = Math.max(0, Math.floor((Math.min(...vs) - 2) / 5) * 5);
+    hi = Math.ceil((Math.max(...vs) + 2) / 5) * 5;
+    if (hi - lo < 10) hi = lo + 10;
+  }
+  const x = (i) => L + (i * (W - L - R)) / (pts.length - 1);
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const ticks = [0, 1, 2, 3].map((k) => lo + ((hi - lo) * k) / 3);
+  const unit = metric === 'win' ? '%' : '';
+  const grid = ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end" class="ax">${Math.round(t)}${unit}</text>`).join('');
+  const line = pts.map((p, i) => `${x(i)},${y(p.ma)}`).join(' ');
+  const dots = pts.map((p, i) => {
+    const label = `${fmtDay(p.f.date)}: ${metric === 'avg' ? fmt1(p.v) : (p.f.won ? 'Vinst' : 'Förlust')}`;
+    return `<circle cx="${x(i)}" cy="${y(p.v)}" r="${metric === 'avg' ? 4 : 3.5}" fill="${p.f.won === false ? 'var(--card)' : 'var(--accent)'}" stroke="var(--accent)" stroke-width="1.5" opacity="${metric === 'avg' ? 0.55 : 0.4}"><title>${label}</title></circle>`;
+  }).join('');
+  // utveckling: snitt av senaste 5 mot de 5 före
+  let delta = '';
+  if (metric === 'avg' && all.length >= 6) {
+    const last = all.slice(-5), prev = all.slice(-10, -5);
+    const a = last.reduce((t, p) => t + p.v, 0) / last.length, b = prev.length ? prev.reduce((t, p) => t + p.v, 0) / prev.length : null;
+    if (b != null) { const d = a - b; delta = `<p class="trendnote">Senaste 5 matcherna: <b>${fmt1(a)}</b> <span class="${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${fmt1(Math.abs(d))}</span> mot de 5 före</p>`; }
+  }
+  return `${controls}${delta}<svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="Utveckling över tid">${grid}
+    <polyline fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${line}"/>${dots}
+    <text x="${L}" y="${H - 8}" class="ax">${fmtDay(pts[0].f.date)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end" class="ax">${fmtDay(pts[pts.length - 1].f.date)}</text></svg>
+    <p class="muted small" style="margin:.3rem 0 0">Linjen är glidande medelvärde (${metric === 'avg' ? '5' : '10'} matcher). Prickarna är enskilda matcher${metric === 'avg' ? '; fylld = vinst, ofylld = förlust' : ''}.</p>`;
+}
+
+// ----- Heatmap över träffar -----
+const BOARD = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+function polar(r, deg) { const a = ((deg - 90) * Math.PI) / 180; return [r * Math.cos(a), r * Math.sin(a)]; }
+function wedgePath(r1, r2, a1, a2) {
+  const [x1, y1] = polar(r2, a1), [x2, y2] = polar(r2, a2), [x3, y3] = polar(r1, a2), [x4, y4] = polar(r1, a1);
+  const f = (n) => n.toFixed(2);
+  return `M${f(x1)} ${f(y1)}A${r2} ${r2} 0 0 1 ${f(x2)} ${f(y2)}L${f(x3)} ${f(y3)}A${r1} ${r1} 0 0 0 ${f(x4)} ${f(y4)}Z`;
+}
+function heatmap(hits) {
+  const get = (k) => hits[k] || 0;
+  const max = Math.max(1, ...BOARD.flatMap((n) => [get('S' + n), get('D' + n), get('T' + n)]), get('25'), get('Bull'));
+  const style = (n, i, label) => {
+    if (!n) return `fill="var(--line)" fill-opacity="${i % 2 ? 0.35 : 0.6}"`;
+    return `fill="var(--accent)" fill-opacity="${(0.15 + 0.85 * Math.sqrt(n / max)).toFixed(2)}"`;
+  };
+  const RING = { in: [22, 90], tr: [90, 110], out: [110, 150], db: [150, 172] };
+  let g = '';
+  BOARD.forEach((n, i) => {
+    const a1 = i * 18 - 9, a2 = i * 18 + 9;
+    const sN = get('S' + n);
+    const seg = (ring, kind, cnt, name) => `<path d="${wedgePath(...RING[ring], a1, a2)}" ${style(cnt, i)} stroke="var(--card)" stroke-width="1"><title>${name}: ${cnt}</title></path>`;
+    g += seg('in', 'S', sN, 'Singel ' + n) + seg('out', 'S', sN, 'Singel ' + n) + seg('tr', 'T', get('T' + n), 'Trippel ' + n) + seg('db', 'D', get('D' + n), 'Dubbel ' + n);
+    const [tx, ty] = polar(188, i * 18);
+    g += `<text x="${tx.toFixed(1)}" y="${(ty + 5).toFixed(1)}" text-anchor="middle" class="bn">${n}</text>`;
+  });
+  g += `<circle r="22" ${style(get('25'), 0)} stroke="var(--card)" stroke-width="1"><title>25: ${get('25')}</title></circle>`;
+  g += `<circle r="10" ${style(get('Bull'), 0)} stroke="var(--card)" stroke-width="1"><title>Bull: ${get('Bull')}</title></circle>`;
+  return `<svg class="board-svg" viewBox="-205 -205 410 410" role="img" aria-label="Heatmap över träffar">${g}</svg>`;
+}
+const SEG_NAME = (k) => (k === 'Bull' ? 'Bull' : k === '25' ? '25' : ({ S: 'Singel ', D: 'Dubbel ', T: 'Trippel ' }[k[0]] + k.slice(1)));
+function heatmapCard(s) {
+  if (!s.dartsTracked) return '<p class="muted">Ingen pildata än. Heatmapen fylls på när du spelar matcher med pil-för-pil-inmatning.</p>';
+  const rank = Object.entries(s.hits).filter(([k]) => k !== 'Miss').sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const miss = s.hits.Miss || 0;
+  return `<div class="heatwrap">${heatmap(s.hits)}
+    <div class="heatside"><div class="small muted">Pilar med data</div><div class="big">${s.dartsTracked}</div>
+      <div class="small muted" style="margin-top:.6rem">Mest träffat</div>
+      <ol class="toplist">${rank.map(([k, n]) => `<li><b>${SEG_NAME(k)}</b> <span>${n} (${Math.round((n / s.dartsTracked) * 100)}%)</span></li>`).join('')}</ol>
+      <div class="small muted" style="margin-top:.6rem">Miss: ${miss} (${Math.round((miss / s.dartsTracked) * 100)}%)</div></div></div>
+    <div class="legend"><span>Färre</span><i></i><span>Fler träffar</span></div>`;
+}
+
 function viewPlayer(id) {
   const p = S.players.find((x) => x.id === id);
   if (!p) return '<p class="empty">Hittar inte spelaren.</p>';
@@ -476,9 +562,11 @@ function viewPlayer(id) {
     ${stat(s.matches, 'Matcher')}${stat(s.wins, 'Vinster')}${stat(s.matches ? s.winPct + '%' : '–', 'Vinst %')}${stat(fmt1(s.avg), '3-pilssnitt')}
     ${stat(s.highTurn || '–', 'Högsta runda')}${stat(s.highCheckout || '–', 'Högsta avslut')}${stat(s.bestLeg ?? '–', 'Bästa leg (pilar)')}${stat(`${s.legsWon}/${s.legsPlayed}`, 'Legs vunna')}
     ${stat(s.n100, '100+ rundor')}${stat(s.n140, '140+ rundor')}${stat(s.n180, '180')}${stat(s.darts, 'Pilar kastade')}
+    ${stat('👕 ' + s.troja, 'Tröjor (20·5·1)')}${stat('👖 ' + s.byxa, 'Byxor (19·7·3)')}${stat(s.practice, 'Övningspass')}${stat(s.dartsTracked, 'Pilar med träffdata')}
   </div>
-  <div class="grid c2" style="margin-top:1.2rem">
-    <div class="card"><h3>Form</h3>${sparkline(s.form)}</div>
+  <div class="card" style="margin-top:1.2rem"><h3>Utveckling över tid</h3>${trendChart(s.form)}</div>
+  <div class="grid c2" style="margin-top:1rem">
+    <div class="card"><h3>Heatmap – var du träffar</h3>${heatmapCard(s)}</div>
     <div class="card"><h3>Mot andra spelare</h3>${h2h.length ? `<table><tbody>${h2h.map((o) => `<tr class="click" data-go="#/spelare/${o.id}"><td>${esc(playerName(o.id, o.name))}</td><td class="num">${o.w} V</td><td class="num">${o.l} F</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Inga avgjorda matcher än.</p>'}</div>
   </div>
   <h2 style="margin-top:1.5rem">Senaste matcher</h2><div class="stack">${mine.length ? mine.map(matchCard).join('') : '<div class="card empty">Inga matcher än.</div>'}</div>`;
@@ -525,6 +613,8 @@ document.addEventListener('click', async (e) => {
       initSetup({ mode: m.mode, outRule: m.outRule, legsToWin: m.legsToWin, format: solo ? 'solo' : 'teams', solo: solo ? rot(ids.flat()) : [], teams: solo ? [] : rot(ids), adding: '', random: false });
       location.hash = '#/ny'; return;
     }
+    case 'trendmetric': S.trendMetric = v; break;
+    case 'trendrange': S.trendRange = +v; break;
     case 'modefilter': S.modeFilter = v ? +v : null; break;
     case 'sort': S.sort = v; break;
     case 'rename': {

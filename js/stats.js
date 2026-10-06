@@ -1,4 +1,4 @@
-import { effective } from './game.js';
+import { effective, specialVisit } from './game.js';
 
 const teamOf = (m, pid) => m.teams.findIndex((t) => t.players.some((p) => p.id === pid));
 
@@ -12,6 +12,8 @@ export function playerStats(pid, matches, mode = null) {
     n100: 0, n140: 0, n180: 0,
     form: [], // [{date, avg, won}] äldst först
     h2h: {},  // oppId -> {name, w, l}
+    hits: {}, // pil-etikett -> antal (S20, T20, D16, 25, Bull, Miss)
+    dartsTracked: 0, troja: 0, byxa: 0, practice: 0,
   };
   const fin = matches
     .filter((m) => m.status === 'finished' && (!mode || m.mode === mode) && teamOf(m, pid) >= 0)
@@ -19,14 +21,15 @@ export function playerStats(pid, matches, mode = null) {
 
   for (const m of fin) {
     const ti = teamOf(m, pid);
-    const won = m.winner === ti;
-    s.matches++;
-    won ? s.wins++ : s.losses++;
+    const practice = m.teams.length === 1; // ensam spelare = övning, räknas inte som vinst/förlust
+    const won = practice ? null : m.winner === ti;
+    if (practice) s.practice++;
+    else { s.matches++; won ? s.wins++ : s.losses++; }
     let mp = 0, md = 0;
     for (const leg of m.legs) {
       if (leg.winner == null) continue;
-      s.legsPlayed++;
-      if (leg.winner === ti) {
+      if (!practice) s.legsPlayed++;
+      if (leg.winner === ti && !practice) {
         s.legsWon++;
         if (m.teams[ti].players.length === 1) {
           const d = leg.turns.filter((t) => t.t === ti).reduce((a, t) => a + t.d, 0);
@@ -42,10 +45,16 @@ export function playerStats(pid, matches, mode = null) {
         if (e >= 140) s.n140++;
         if (e === 180) s.n180++;
         if (t.co && t.s > s.highCheckout) s.highCheckout = t.s;
+        if (t.ds) {
+          for (const l of t.ds) { s.hits[l] = (s.hits[l] || 0) + 1; s.dartsTracked++; }
+          const sp = specialVisit(t.ds);
+          if (sp === 'tröja') s.troja++;
+          else if (sp === 'byxa') s.byxa++;
+        }
       }
     }
-    s.form.push({ id: m.id, date: m.finished_at || m.created_at, avg: md ? (mp / md) * 3 : 0, won });
-    m.teams.forEach((tm, i) => {
+    s.form.push({ id: m.id, date: m.finished_at || m.created_at, avg: md ? (mp / md) * 3 : 0, won, practice });
+    if (!practice) m.teams.forEach((tm, i) => {
       if (i === ti) return;
       for (const p of tm.players) {
         const r = (s.h2h[p.id] ||= { id: p.id, name: p.name, w: 0, l: 0 });
