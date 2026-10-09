@@ -236,14 +236,13 @@ export function checkoutRoutes(rem, dartsLeft, outRule, max = 3) {
 }
 
 /**
- * Tröja = 20, 5 och 1 i samma runda. Byxa = 19, 7 och 3. Valfri ordning och valfri ring (S/D/T).
+ * Tröja = singel 20, singel 5 och singel 1 i samma runda. Byxa = singel 19, singel 7 och singel 3.
+ * Valfri ordning, men alla tre pilar måste vara singlar (ingen dubbel, trippel, 25 eller Bull).
  * ds = pilarnas etiketter, t.ex. ['S20','S5','S1'].
  */
 export function specialVisit(ds) {
-  if (!ds || ds.length !== 3) return null;
-  const nums = ds.map((l) => (/^[SDT]\d+$/.test(l) ? +l.slice(1) : null));
-  if (nums.includes(null)) return null;
-  const k = nums.sort((a, b) => a - b).join();
+  if (!ds || ds.length !== 3 || !ds.every((l) => /^S\d+$/.test(l))) return null;
+  const k = ds.map((l) => +l.slice(1)).sort((a, b) => a - b).join();
   if (k === '1,5,20') return 'tröja';
   if (k === '3,7,19') return 'byxa';
   return null;

@@ -373,3 +373,18 @@ b.sp { color: var(--accent); }
 #homebar:empty { display: none; }
 .homesel { min-height: 38px; padding: .3rem 1.6rem .3rem .7rem; font-size: .9rem; font-weight: 600; border: 1.5px solid var(--ink); border-radius: var(--radius); background: var(--card); color: var(--ink); max-width: 46vw; }
 @media (max-width: 759px) { .top { gap: .6rem; } }
+
+/* ===== tröja / byxa-jubel ===== */
+#celebrate { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(105, 32, 18, .82); animation: celbg .25s ease-out; overflow: hidden; cursor: pointer; }
+#celebrate.out { opacity: 0; transition: opacity .3s; }
+.cel-card { text-align: center; color: #faf5ee; animation: celpop .7s cubic-bezier(.2, 1.6, .4, 1) both; padding: 1rem; }
+.cel-emoji { font-size: clamp(9rem, 48vw, 18rem); line-height: 1; filter: drop-shadow(0 12px 24px rgba(0, 0, 0, .35)); animation: celwobble 1.1s ease-in-out .5s infinite; }
+.cel-title { font-family: var(--serif); font-style: italic; font-weight: 700; font-size: clamp(3.5rem, 18vw, 8rem); line-height: 1; letter-spacing: -.02em; text-shadow: 0 6px 0 rgba(0, 0, 0, .25); }
+.cel-sub { font-size: clamp(1.1rem, 5vw, 2rem); font-weight: 600; margin-top: .6rem; opacity: .95; }
+.confetti { position: absolute; inset: 0; pointer-events: none; }
+.confetti i { position: absolute; top: -5vh; width: 10px; height: 18px; border-radius: 2px; animation: celfall linear forwards; }
+@keyframes celbg { from { opacity: 0; } to { opacity: 1; } }
+@keyframes celpop { from { transform: scale(.2) rotate(-14deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes celwobble { 0%, 100% { transform: rotate(-7deg) scale(1); } 50% { transform: rotate(7deg) scale(1.08); } }
+@keyframes celfall { to { transform: translateY(115vh) rotate(720deg); } }
+@media (prefers-reduced-motion: reduce) { .cel-card, .cel-emoji, .confetti i { animation: none; } .confetti { display: none; } }

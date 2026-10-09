@@ -396,7 +396,7 @@ function addDart(base) {
   const info = legInfo(m);
   if (evalDarts(info.rem[info.next.team], S.darts, m.outRule).state !== 'open') return;
   let dart;
-  if (base === 0) dart = { v: 0, dbl: false, l: 'Miss' };
+  if (base === 0) { dart = { v: 0, dbl: false, l: 'Miss' }; toast('Fan… kastar du verkligen med rätt hand? 🤨'); }
   else if (base === 25) dart = S.mult === 2 ? { v: 50, dbl: true, l: 'Bull' } : { v: 25, dbl: false, l: '25' };
   else dart = { v: base * S.mult, dbl: S.mult === 2, l: dartLabel(base, S.mult) };
   S.darts.push(dart);
@@ -416,12 +416,31 @@ function submitDarts() {
   const r = evalDarts(info.rem[info.next.team], S.darts, m.outRule);
   if (r.state === 'open') return;
   const ds = S.darts.map((d) => d.l);
+  const thrower = info.next.player.name;
   S.darts = []; S.mult = 1;
   if (r.state === 'checkout') commit(applyTurn(m, 'checkout', r.sum, r.n, ds));
   else if (r.state === 'bust') { commit(applyTurn(m, 'bust', r.sum, 3, ds)); toast('Bust!'); }
   else commit(applyTurn(m, 'ok', r.sum, 3, ds));
   const sp = specialVisit(ds);
-  if (sp) toast(sp === 'tröja' ? '👕 TRÖJA! 20 · 5 · 1' : '👖 BYXA! 19 · 7 · 3');
+  if (sp) celebrate(sp, thrower);
+}
+// Stor animation när någon får tröja eller byxa.
+function celebrate(kind, who) {
+  const tro = kind === 'tröja';
+  document.getElementById('celebrate')?.remove();
+  const el = document.createElement('div');
+  el.id = 'celebrate';
+  el.setAttribute('role', 'alert');
+  const colors = ['#ea4a1f', '#f2b12c', '#e8741c', '#692012', '#faf5ee', '#1f7a4d'];
+  const bits = Array.from({ length: 46 }, () => `<i style="left:${Math.random() * 100}%;background:${colors[Math.floor(Math.random() * colors.length)]};animation-delay:${(Math.random() * 0.9).toFixed(2)}s;animation-duration:${(2 + Math.random() * 1.6).toFixed(2)}s;transform:rotate(${Math.floor(Math.random() * 360)}deg)"></i>`).join('');
+  el.innerHTML = `<div class="confetti">${bits}</div><div class="cel-card"><div class="cel-emoji">${tro ? '👕' : '👖'}</div>
+    <div class="cel-title">${tro ? 'TRÖJA!' : 'BYXA!'}</div>
+    <div class="cel-sub">${esc(who)} – ${tro ? '20 · 5 · 1' : '19 · 7 · 3'}</div></div>`;
+  const close = () => { clearTimeout(el.t); el.classList.add('out'); setTimeout(() => el.remove(), 300); };
+  el.addEventListener('click', close);
+  document.body.appendChild(el);
+  el.t = setTimeout(close, 3600);
+  try { navigator.vibrate?.([120, 60, 120, 60, 240]); } catch {}
 }
 function undoDart() {
   const m = getMatch(route().id);

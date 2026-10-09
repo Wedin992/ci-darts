@@ -106,8 +106,12 @@ for (let r = 2; r <= 170; r++) {
 console.log('avslutsförslag OK');
 import { specialVisit } from '../js/game.js';
 assert.equal(specialVisit(['S20', 'S5', 'S1']), 'tröja');
-assert.equal(specialVisit(['S1', 'T20', 'S5']), 'tröja');
-assert.equal(specialVisit(['S3', 'S19', 'D7']), 'byxa');
+assert.equal(specialVisit(['S1', 'S20', 'S5']), 'tröja');
+assert.equal(specialVisit(['S1', 'T20', 'S5']), null);   // trippel räknas inte
+assert.equal(specialVisit(['D10', 'S5', 'S1']), null);   // dubbel räknas inte
+assert.equal(specialVisit(['S3', 'S19', 'S7']), 'byxa');
+assert.equal(specialVisit(['S3', 'S19', 'D7']), null);
+assert.equal(specialVisit(['T19', 'S7', 'S3']), null);
 assert.equal(specialVisit(['S20', 'S5']), null);
 assert.equal(specialVisit(['S20', 'S5', 'Miss']), null);
 assert.equal(specialVisit(['S20', 'S5', '25']), null);
