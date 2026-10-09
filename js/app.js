@@ -1,7 +1,7 @@
 import { store, isShared, DEFAULT_HOME } from './store.js';
 import {
   newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon,
-  checkoutRoutes, currentLeg, effective, uid, specialVisit,
+  checkoutRoutes, currentLeg, effective, uid, specialVisit, replacePlayer,
 } from './game.js';
 import { playerStats, matchSummary, matchHits } from './stats.js';
 
@@ -186,7 +186,7 @@ function viewHome() {
 
 // ----- Ny match -----
 function initSetup(from) {
-  S.setup = from || { mode: 501, outRule: 'double', legsToWin: 1, format: 'solo', solo: [], teams: [], adding: '', random: false };
+  S.setup = from || { mode: 501, outRule: 'straight', legsToWin: 1, format: 'solo', solo: [], teams: [], adding: '', random: false };
 }
 const selectedIds = (u) => (u.format === 'solo' ? u.solo : u.teams.flat());
 function togglePlayer(id) {
@@ -248,7 +248,7 @@ function viewSetup() {
   return `<h1>Ny <i>match</i></h1>
   <div class="card stack setupcard">
     <div class="setrow"><label class="f">Spel</label>${seg(u.mode, 'mode', [[101, '101'], [301, '301'], [501, '501']])}</div>
-    <div class="setrow"><label class="f">Avslut</label>${seg(u.outRule, 'out', [['double', 'Dubbel ut'], ['straight', 'Rak ut']])}</div>
+    <div class="setrow"><label class="f">Avslut</label>${seg(u.outRule, 'out', [['straight', 'Rak ut'], ['double', 'Dubbel ut']])}</div>
     <div class="setrow"><label class="f">Först till</label>${seg(u.legsToWin, 'legs', [[1, '1 leg'], [2, '2 legs'], [3, '3 legs'], [4, '4 legs']])}</div>
     <div class="setrow"><label class="f">Format</label>${seg(u.format, 'format', [['solo', 'Var och en'], ['teams', 'Lag (2 + 2)']])}</div>
     <div><label class="f">Vilka spelar? <span class="muted" style="text-transform:none;letter-spacing:0">Tryck för att välja</span></label>
@@ -374,6 +374,7 @@ function viewMatch(id) {
   const lock = S.locked ? 'disabled' : '';
   return `<div class="gtop"><a class="back" href="#/" aria-label="Till startsidan">‹</a>
       <span class="gmeta">${modeLabel(m)} · Leg ${m.legs.length}</span>
+      <button class="btn ghost sm" data-act="editplayers" aria-label="Byt spelare i matchen" title="Byt spelare">✎</button>
       <button class="btn ghost sm" data-act="abort" data-id="${m.id}">Avbryt</button></div>
     <div class="gamegrid">
       <div class="gboards">${rows}</div>
@@ -457,14 +458,44 @@ function commit(next) {
 }
 function renderModal() {
   const el = $('#modal');
-  if (S.modal?.type !== 'newhome') { el.innerHTML = ''; return; }
-  if (el.querySelector('#homename')) return; // behåll det som skrivits
-  el.innerHTML = `<div class="overlay" data-act="closemodal"><div class="dialog" role="dialog" aria-modal="true">
-    <h2>Skapa nytt hem</h2>
-    <p class="muted">Ett hem har egna spelare, matcher och statistik, helt skilt från de andra hemmen. Alla ser vilka hem som finns och kan välja dem i listan.</p>
-    <input type="text" id="homename" placeholder="T.ex. Jespers hem" maxlength="40" autocomplete="off" data-enter="createhome" style="width:100%">
-    <div class="row spread" style="margin-top:1rem"><button class="link" data-act="closemodal">Avbryt</button><button class="btn" data-act="createhome">Skapa hem</button></div></div></div>`;
-  el.querySelector('#homename').focus();
+  const mo = S.modal;
+  if (mo?.type === 'newhome') {
+    if (el.querySelector('#homename')) return; // behåll det som skrivits
+    el.innerHTML = `<div class="overlay" data-act="closemodal"><div class="dialog" role="dialog" aria-modal="true">
+      <h2>Skapa nytt hem</h2>
+      <p class="muted">Ett hem har egna spelare, matcher och statistik, helt skilt från de andra hemmen. Alla ser vilka hem som finns och kan välja dem i listan.</p>
+      <input type="text" id="homename" placeholder="T.ex. Jespers hem" maxlength="40" autocomplete="off" data-enter="createhome" style="width:100%">
+      <div class="row spread" style="margin-top:1rem"><button class="link" data-act="closemodal">Avbryt</button><button class="btn" data-act="createhome">Skapa hem</button></div></div></div>`;
+    el.querySelector('#homename').focus();
+  } else if (mo?.type === 'replace') {
+    if (el.querySelector('#repfrom') || el.querySelector('.dialog')) return;
+    const m = getMatch(route().id);
+    if (!m) { el.innerHTML = ''; return; }
+    const inMatch = new Set(m.teams.flatMap((t) => t.players.map((p) => p.id)));
+    const members = [...new Map(m.teams.flatMap((t) => t.players).map((p) => [p.id, p])).values()];
+    const others = S.players.filter((p) => !inMatch.has(p.id));
+    el.innerHTML = `<div class="overlay" data-act="closemodal"><div class="dialog" role="dialog" aria-modal="true">
+      <h2>Byt spelare i matchen</h2>
+      <p class="muted">Om fel person valdes: alla kast och allt resultat som tillhör den ena flyttas till den andra, och statistiken räknas om. Ingenting raderas.</p>
+      ${others.length ? `<label class="f" style="margin-top:.8rem">Byt ut</label>
+        <select id="repfrom" style="width:100%">${members.map((p) => `<option value="${p.id}">${esc(playerName(p.id, p.name))}</option>`).join('')}</select>
+        <label class="f">Mot</label>
+        <select id="repto" style="width:100%">${others.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
+        <div class="row spread" style="margin-top:1.2rem"><button class="link" data-act="closemodal">Avbryt</button><button class="btn" data-act="doreplace">Byt spelare</button></div>`
+      : `<p><b>Det finns ingen annan spelare att byta till.</b> Lägg först till spelaren under Spelare eller Ny match.</p><div class="row" style="margin-top:1rem"><button class="btn ghost" data-act="closemodal">Stäng</button></div>`}
+      </div></div>`;
+  } else el.innerHTML = '';
+}
+function doReplace() {
+  const m = getMatch(route().id);
+  const from = $('#repfrom')?.value, toId = $('#repto')?.value;
+  const to = S.players.find((p) => p.id === toId);
+  const next = m && to ? replacePlayer(m, from, { id: to.id, name: to.name }) : null;
+  if (!next) { toast('Det gick inte att byta spelare'); return; }
+  const was = m.teams.flatMap((t) => t.players).find((p) => p.id === from)?.name ?? '?';
+  S.modal = null;
+  saveMatch(next);
+  toast(`${was} ersattes av ${to.name}`);
 }
 
 function matchHeatCard(m) {
@@ -497,6 +528,7 @@ function viewMatchDone(m) {
       <div class="small" style="opacity:.85;margin-top:.3rem">${fmtDate(m.finished_at || m.created_at)}</div></div>
     <div class="row" style="margin:1rem 0">
       <button class="btn" data-act="rematch" data-id="${m.id}">Spela igen</button>
+      <button class="btn ghost" data-act="editplayers">✎ Byt spelare</button>
       <button class="btn ghost" data-act="undo">↶ Ångra sista kastet</button>
       <button class="btn ghost" data-act="delete" data-id="${m.id}">Ta bort match</button></div>
     <div class="card tablewrap"><table><thead><tr><th>Lag</th><th class="num">Legs</th><th class="num">Snitt</th><th class="num">Högsta</th><th class="num">180</th></tr></thead><tbody>
@@ -693,6 +725,8 @@ document.addEventListener('click', async (e) => {
       initSetup({ mode: m.mode, outRule: m.outRule, legsToWin: m.legsToWin, format: solo ? 'solo' : 'teams', solo: solo ? rot(ids.flat()) : [], teams: solo ? [] : rot(ids), adding: '', random: false });
       location.hash = '#/ny'; return;
     }
+    case 'editplayers': S.modal = { type: 'replace' }; break;
+    case 'doreplace': doReplace(); return;
     case 'createhome': await createHome(); return;
     case 'copyhomelink': await copyHomeLink(); return;
     case 'matchheat': S.matchHeat = v; break;

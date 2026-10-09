@@ -125,3 +125,26 @@ assert.equal(ps.matches, 0); assert.equal(ps.wins, 0); assert.equal(ps.practice,
 assert.equal(ps.hits.D20, 1); assert.equal(ps.hits.Miss, 1); assert.equal(ps.dartsTracked, 5);
 assert.ok(ps.avg > 0);
 console.log('tröja/byxa + övning OK');
+import { replacePlayer } from '../js/game.js';
+let rp = newMatch({ mode: 101, outRule: 'straight', legsToWin: 1, teams: [{ name: 'Anna', players: [A] }, { name: 'Bo', players: [B] }] });
+rp = applyTurn(rp, 'ok', 60, 3, ['T20', 'S20', 'Miss']);
+rp = applyTurn(rp, 'ok', 45, 3, ['S20', 'S20', 'S5']);
+rp = applyTurn(rp, 'checkout', 41, 2, ['S1', 'D20']);
+const fixed = replacePlayer(rp, 'a', C);
+assert.equal(fixed.teams[0].name, 'Cia');
+assert.equal(fixed.teams[0].players[0].id, 'c');
+assert.ok(fixed.legs[0].turns.filter((t) => t.t === 0).every((t) => t.p === 'c'));
+assert.ok(fixed.legs[0].turns.filter((t) => t.t === 1).every((t) => t.p === 'b'));
+assert.equal(fixed.rev, rp.rev + 1);
+assert.equal(fixed.winner, rp.winner);
+assert.equal(playerStats('c', [fixed]).wins, 1);
+assert.equal(playerStats('a', [fixed]).matches, 0);
+assert.equal(replacePlayer(rp, 'a', B), null);     // B är redan med
+assert.equal(replacePlayer(rp, 'zzz', C), null);   // finns inte
+assert.equal(rp.teams[0].players[0].id, 'a');      // originalet orört
+// lag: byt en av två
+let tm = newMatch({ mode: 301, outRule: 'straight', legsToWin: 1, teams: [{ name: 'Anna & Bo', players: [A, B] }, { name: 'Cia & Dan', players: [C, D] }] });
+tm = applyTurn(tm, 'ok', 26, 3, ['S20', 'S5', 'S1']);
+const t2 = replacePlayer(tm, 'b', { id: 'e', name: 'Eva' });
+assert.equal(t2.teams[0].name, 'Anna & Eva');
+console.log('byt spelare OK');

@@ -247,3 +247,21 @@ export function specialVisit(ds) {
   if (k === '3,7,19') return 'byxa';
   return null;
 }
+
+/**
+ * Byter ut en spelare mot en annan i en match (t.ex. om fel person valdes).
+ * Alla kast som tillhörde `fromId` tillskrivs `to`, och lagnamnen uppdateras.
+ * Returnerar null om bytet inte går (spelaren finns inte, eller `to` är redan med i matchen).
+ */
+export function replacePlayer(m, fromId, to) {
+  const all = m.teams.flatMap((t) => t.players.map((p) => p.id));
+  if (!all.includes(fromId) || fromId === to.id || all.includes(to.id)) return null;
+  const c = structuredClone(m);
+  for (const t of c.teams) {
+    t.players = t.players.map((p) => (p.id === fromId ? { id: to.id, name: to.name } : p));
+    t.name = t.players.map((p) => p.name).join(' & ');
+  }
+  for (const leg of c.legs) for (const turn of leg.turns) if (turn.p === fromId) turn.p = to.id;
+  c.rev = (c.rev || 0) + 1;
+  return c;
+}
