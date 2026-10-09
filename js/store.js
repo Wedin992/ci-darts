@@ -1,7 +1,10 @@
 // Lagring: Supabase (delad) om config.js är ifylld, annars localStorage (lokalt läge).
+// Allt data hör till ett "hem" (home_id). Finns inte homes-tabellen än körs appen utan hem (äldre läge).
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 export const isShared = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+// Det ursprungliga hemmet ("Ci"). Samma id som i supabase/schema.sql.
+export const DEFAULT_HOME = '00000000-0000-4000-8000-000000000001';
 
 // ---------- Supabase via REST ----------
 async function rest(path, { method = 'GET', body, prefer } = {}) {
@@ -23,10 +26,18 @@ async function rest(path, { method = 'GET', body, prefer } = {}) {
   }
   return res.status === 204 ? null : res.json().catch(() => null);
 }
+const inHome = (home) => (home ? `&home_id=eq.${encodeURIComponent(home)}` : '');
 
 const remote = {
-  async players() {
-    return rest('players?select=id,name,created_at&order=name.asc');
+  /** Lista över hem, eller null om homes-tabellen inte finns (då körs appen utan hem). */
+  async homes() {
+    try { return await rest('homes?select=id,name,created_at&order=created_at.asc'); } catch { return null; }
+  },
+  async addHome(h) {
+    await rest('homes', { method: 'POST', body: h });
+  },
+  async players(home) {
+    return rest(`players?select=id,name,created_at&order=name.asc${inHome(home)}`);
   },
   async addPlayer(p) {
     await rest('players', { method: 'POST', body: p });
@@ -34,8 +45,8 @@ const remote = {
   async renamePlayer(id, name) {
     await rest(`players?id=eq.${id}`, { method: 'PATCH', body: { name } });
   },
-  async matches() {
-    const rows = await rest('matches?select=data&order=created_at.desc&limit=2000');
+  async matches(home) {
+    const rows = await rest(`matches?select=data&order=created_at.desc&limit=2000${inHome(home)}`);
     return rows.map((r) => r.data);
   },
   async saveMatch(m) {
@@ -45,6 +56,7 @@ const remote = {
       body: {
         id: m.id, status: m.status, mode: m.mode,
         created_at: m.created_at, updated_at: new Date().toISOString(), data: m,
+        ...(m.home_id ? { home_id: m.home_id } : {}),
       },
     });
   },
@@ -56,14 +68,27 @@ const remote = {
 // ---------- localStorage ----------
 const KEY = 'ci-darts-v1';
 const read = () => {
-  try { return JSON.parse(localStorage.getItem(KEY)) || { players: [], matches: [] }; }
-  catch { return { players: [], matches: [] }; }
+  let d;
+  try { d = JSON.parse(localStorage.getItem(KEY)); } catch { d = null; }
+  d = d || { players: [], matches: [] };
+  if (!d.homes || !d.homes.length) d.homes = [{ id: DEFAULT_HOME, name: 'Ci', created_at: new Date().toISOString() }];
+  return d;
 };
 const write = (d) => localStorage.setItem(KEY, JSON.stringify(d));
+// Data utan home_id (äldre) hör till det ursprungliga hemmet.
+const mine = (x, home) => (x.home_id || DEFAULT_HOME) === (home || DEFAULT_HOME);
 
 const local = {
-  async players() {
-    return read().players.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  async homes() {
+    return read().homes;
+  },
+  async addHome(h) {
+    const d = read();
+    d.homes.push(h);
+    write(d);
+  },
+  async players(home) {
+    return read().players.filter((p) => mine(p, home)).sort((a, b) => a.name.localeCompare(b.name, 'sv'));
   },
   async addPlayer(p) {
     const d = read();
@@ -76,8 +101,8 @@ const local = {
     if (p) p.name = name;
     write(d);
   },
-  async matches() {
-    return read().matches.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  async matches(home) {
+    return read().matches.filter((m) => mine(m, home)).sort((a, b) => b.created_at.localeCompare(a.created_at));
   },
   async saveMatch(m) {
     const d = read();

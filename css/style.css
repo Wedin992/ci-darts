@@ -368,3 +368,8 @@ b.sp { color: var(--accent); }
   body.ingame .gright .hint { flex-wrap: wrap; overflow: visible; }
   body.ingame .gright .hint .hl { width: 100%; }
 }
+
+/* ===== hem ===== */
+#homebar:empty { display: none; }
+.homesel { min-height: 38px; padding: .3rem 1.6rem .3rem .7rem; font-size: .9rem; font-weight: 600; border: 1.5px solid var(--ink); border-radius: var(--radius); background: var(--card); color: var(--ink); max-width: 46vw; }
+@media (max-width: 759px) { .top { gap: .6rem; } }

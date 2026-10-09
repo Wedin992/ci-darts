@@ -1,4 +1,4 @@
-import { store, isShared } from './store.js';
+import { store, isShared, DEFAULT_HOME } from './store.js';
 import {
   newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon,
   checkoutRoutes, currentLeg, effective, uid, specialVisit,
@@ -21,6 +21,7 @@ function toast(msg) {
 }
 
 const S = {
+  homes: null, home: null, // hem (null = databasen saknar hem-stöd än)
   players: [], matches: [], loaded: false, error: null,
   setup: null, matchHeat: 'all', trendMetric: 'avg', trendRange: 30, darts: [], mult: 1, locked: false, timer: null, keybuf: '', modal: null, sort: 'wins', modeFilter: null, saving: false,
 };
@@ -31,7 +32,7 @@ const getMatch = (id) => S.matches.find((m) => m.id === id);
 // ---------- data ----------
 async function refresh({ quiet = false } = {}) {
   try {
-    const [players, matches] = await Promise.all([store.players(), store.matches()]);
+    const [players, matches] = await Promise.all([store.players(S.home), store.matches(S.home)]);
     S.players = players;
     // Behåll lokalt nyare version av en match vi håller på att spela in
     const local = new Map(S.matches.map((m) => [m.id, m]));
@@ -62,6 +63,43 @@ async function saveMatch(m) {
   }
 }
 
+// ---------- hem ----------
+const homeName = () => S.homes?.find((h) => h.id === S.home)?.name ?? '';
+function homeBar() {
+  if (!S.homes) return '';
+  return `<select id="homesel" class="homesel" aria-label="Välj hem">${S.homes.map((h) => `<option value="${h.id}" ${h.id === S.home ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}<option value="__new">＋ Skapa nytt hem…</option></select>`;
+}
+function setHome(id, reload = true) {
+  S.home = id;
+  try { localStorage.setItem('ci-darts-home', id); } catch {}
+  if (!reload) return;
+  S.loaded = false; S.players = []; S.matches = []; S.setup = null;
+  if (location.hash !== '#/') location.hash = '#/';
+  render();
+  refresh();
+}
+async function createHome() {
+  const name = ($('#homename')?.value || '').trim();
+  if (!name) return;
+  if (S.homes.some((h) => h.name.toLowerCase() === name.toLowerCase())) { toast('Det hemmet finns redan'); return; }
+  const h = { id: uid(), name, created_at: new Date().toISOString() };
+  try {
+    await store.addHome(h);
+  } catch (e) {
+    toast(e.status === 409 ? 'Det hemmet finns redan' : 'Kunde inte skapa hemmet');
+    return;
+  }
+  S.homes.push(h);
+  S.modal = null;
+  setHome(h.id);
+  toast(`Välkommen hem – ${name}`);
+}
+async function copyHomeLink() {
+  const url = `${location.origin}${location.pathname}?home=${S.home}`;
+  try { await navigator.clipboard.writeText(url); toast('Länken är kopierad – skicka den till familjen'); }
+  catch { prompt('Kopiera länken till det här hemmet:', url); }
+}
+
 // ---------- routing ----------
 function route() {
   const parts = (location.hash.replace(/^#\/?/, '') || '').split('/');
@@ -84,6 +122,8 @@ function render() {
   $('#tabbar').innerHTML = [
     ['', 'Start', '◉', 'home'], ['ny', 'Ny match', '＋', 'ny'], ['historik', 'Historik', '☰', 'historik'], ['spelare', 'Spelare', '♟', 'spelare'],
   ].map(([h, l, i, k]) => `<a href="#/${h}" class="${active === k || r.name === k ? 'on' : ''}"><b>${i}</b>${l}</a>`).join('');
+  const hb = homeBar();
+  if (S.hb !== hb) { $('#homebar').innerHTML = hb; S.hb = hb; }
   $('#banner').innerHTML = isShared ? '' : '<div class="bn">Lokalt läge – data delas inte mellan telefoner (se README)</div>';
 
   const gm = r.name === 'match' ? getMatch(r.id) : null;
@@ -126,7 +166,7 @@ function viewHome() {
   const active = S.matches.filter((m) => m.status === 'active');
   const done = S.matches.filter((m) => m.status === 'finished').slice(0, 5);
   const top = leaderboard().sort((a, b) => b.s.wins - a.s.wins || b.s.avg - a.s.avg).slice(0, 5);
-  return `<section class="hero"><h1>Dags för <i>en match?</i></h1>
+  return `<section class="hero">${S.homes ? `<p class="small muted" style="margin:0 0 .3rem">Hem: <b>${esc(homeName())}</b> · <button class="link" data-act="copyhomelink">Kopiera länk till det här hemmet</button></p>` : ''}<h1>Dags för <i>en match?</i></h1>
     <p class="muted">101, 301 eller 501 – ensam eller i lag. All statistik sparas och är öppen för alla.</p>
     <a class="btn big" href="#/ny">Starta ny match →</a></section>
   <div class="grid c2">
@@ -233,6 +273,7 @@ function startMatch() {
     teams = (u.random ? shuffle(u.teams) : u.teams).map((t) => ({ name: t.map((id) => playerName(id)).join(' & '), players: t.map(P) }));
   }
   const m = newMatch({ mode: u.mode, outRule: u.outRule, legsToWin: u.legsToWin, teams });
+  if (S.homes) m.home_id = S.home;
   S.setup = null;
   saveMatch(m);
   location.hash = `#/match/${m.id}`;
@@ -242,7 +283,7 @@ async function addPlayerFromInput() {
   const name = (input?.value || '').trim();
   if (!name) return;
   if (S.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) { toast('Det namnet finns redan'); return; }
-  const p = { id: uid(), name, created_at: new Date().toISOString() };
+  const p = { id: uid(), name, created_at: new Date().toISOString(), ...(S.homes ? { home_id: S.home } : {}) };
   try {
     await store.addPlayer(p);
   } catch (e) {
@@ -395,7 +436,17 @@ function commit(next) {
   if (next.status === 'finished') toast('Match avgjord!');
   else if (nowLeg.some((v, i) => v > wasLeg[i])) toast('Leg vunnet!');
 }
-function renderModal() { $('#modal').innerHTML = ''; }
+function renderModal() {
+  const el = $('#modal');
+  if (S.modal?.type !== 'newhome') { el.innerHTML = ''; return; }
+  if (el.querySelector('#homename')) return; // behåll det som skrivits
+  el.innerHTML = `<div class="overlay" data-act="closemodal"><div class="dialog" role="dialog" aria-modal="true">
+    <h2>Skapa nytt hem</h2>
+    <p class="muted">Ett hem har egna spelare, matcher och statistik, helt skilt från de andra hemmen. Alla ser vilka hem som finns och kan välja dem i listan.</p>
+    <input type="text" id="homename" placeholder="T.ex. Jespers hem" maxlength="40" autocomplete="off" data-enter="createhome" style="width:100%">
+    <div class="row spread" style="margin-top:1rem"><button class="link" data-act="closemodal">Avbryt</button><button class="btn" data-act="createhome">Skapa hem</button></div></div></div>`;
+  el.querySelector('#homename').focus();
+}
 
 function matchHeatCard(m) {
   const people = [...new Map(m.teams.flatMap((t) => t.players).map((p) => [p.id, p])).values()];
@@ -623,6 +674,8 @@ document.addEventListener('click', async (e) => {
       initSetup({ mode: m.mode, outRule: m.outRule, legsToWin: m.legsToWin, format: solo ? 'solo' : 'teams', solo: solo ? rot(ids.flat()) : [], teams: solo ? [] : rot(ids), adding: '', random: false });
       location.hash = '#/ny'; return;
     }
+    case 'createhome': await createHome(); return;
+    case 'copyhomelink': await copyHomeLink(); return;
     case 'matchheat': S.matchHeat = v; break;
     case 'trendmetric': S.trendMetric = v; break;
     case 'trendrange': S.trendRange = +v; break;
@@ -642,6 +695,11 @@ document.addEventListener('click', async (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'homesel') {
+    if (e.target.value === '__new') { e.target.value = S.home; S.modal = { type: 'newhome' }; render(); }
+    else setHome(e.target.value);
+    return;
+  }
   if (e.target.dataset?.act === 'random') { S.setup.random = e.target.checked; return; }
   const sel = e.target.closest('select');
   if (!sel) return;
@@ -652,6 +710,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.target.dataset?.enter === 'addplayer' && e.key === 'Enter') { addPlayerFromInput(); return; }
+  if (e.target.dataset?.enter === 'createhome' && e.key === 'Enter') { createHome(); return; }
   if (route().name !== 'match' || ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) || e.metaKey || e.ctrlKey) return;
   const m = getMatch(route().id);
   if (!m || m.status !== 'active') return;
@@ -678,8 +737,20 @@ document.addEventListener('keydown', (e) => {
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
-render();
-refresh();
+async function init() {
+  render();
+  const homes = await store.homes();
+  if (homes) {
+    S.homes = homes;
+    const param = new URLSearchParams(location.search).get('home');
+    let saved = null;
+    try { saved = localStorage.getItem('ci-darts-home'); } catch {}
+    setHome([param, saved, DEFAULT_HOME].find((id) => id && homes.some((h) => h.id === id)) || homes[0]?.id || null, false);
+    if (param) history.replaceState(null, '', location.pathname + location.hash);
+  }
+  await refresh();
+}
+init();
 // Håll vyn färsk så att andra kan följa en match från sin egen mobil.
 setInterval(() => { if (isShared && !document.hidden && !S.modal && !S.saving) refresh({ quiet: true }); }, 5000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh({ quiet: true }); });
