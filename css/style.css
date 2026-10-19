@@ -388,3 +388,17 @@ b.sp { color: var(--accent); }
 @keyframes celwobble { 0%, 100% { transform: rotate(-7deg) scale(1); } 50% { transform: rotate(7deg) scale(1.08); } }
 @keyframes celfall { to { transform: translateY(115vh) rotate(720deg); } }
 @media (prefers-reduced-motion: reduce) { .cel-card, .cel-emoji, .confetti i { animation: none; } .confetti { display: none; } }
+
+/* ===== En MÖLLER (dubbel/trippel 18) ===== */
+#moller { position: fixed; inset: 0; z-index: 85; display: grid; place-items: center; pointer-events: none; overflow: hidden; }
+#moller.out { opacity: 0; transition: opacity .35s; }
+.mol-rays { position: absolute; inset: -50%; background: repeating-conic-gradient(from 0deg, rgba(234, 74, 31, .55) 0 10deg, rgba(242, 177, 44, .45) 10deg 20deg); animation: molspin 2.4s linear infinite, molfade .25s ease-out; }
+.mol-card { position: relative; display: grid; justify-items: center; gap: .4rem; animation: molpop .7s cubic-bezier(.2, 1.7, .4, 1) both; }
+.mol-card img { width: min(62vw, 330px); max-height: 58vh; object-fit: cover; border: 6px solid #faf5ee; border-radius: 6px; box-shadow: 0 14px 40px rgba(0, 0, 0, .5); transform: rotate(-4deg); animation: molshake .5s ease-in-out .6s 3; }
+.mol-text { font-family: var(--serif); font-style: italic; font-weight: 700; font-size: clamp(2.4rem, 13vw, 5.5rem); line-height: 1; color: #fff; -webkit-text-stroke: 2px #692012; paint-order: stroke fill; text-shadow: 0 5px 0 #692012, 0 10px 24px rgba(0, 0, 0, .5); white-space: nowrap; transform: rotate(-3deg); animation: moltext .5s ease-in-out .5s infinite alternate; }
+@keyframes molspin { to { transform: rotate(360deg); } }
+@keyframes molfade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes molpop { from { transform: scale(.1) rotate(18deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes molshake { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg) scale(1.04); } }
+@keyframes moltext { from { transform: rotate(-3deg) scale(1); } to { transform: rotate(2deg) scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .mol-rays, .mol-card, .mol-card img, .mol-text { animation: none; } }

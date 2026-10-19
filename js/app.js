@@ -404,6 +404,7 @@ function addDart(base) {
   else dart = { v: base * S.mult, dbl: S.mult === 2, l: dartLabel(base, S.mult) };
   S.darts.push(dart);
   S.mult = 1;
+  if (dart.l === 'D18' || dart.l === 'T18') moller();
   const r = evalDarts(info.rem[info.next.team], S.darts, m.outRule);
   if (r.state !== 'open') {
     // Visa sista pilen en kort stund, byt sedan automatiskt till nästa spelare. Ångra hinner avbryta.
@@ -426,6 +427,17 @@ function submitDarts() {
   else commit(applyTurn(m, 'ok', r.sum, 3, ds));
   const sp = specialVisit(ds);
   if (sp) celebrate(sp, thrower);
+}
+// En MÖLLER: dubbel eller trippel 18. Tar inte över skärmen – man kan fortsätta kasta medan den visas.
+function moller() {
+  document.getElementById('moller')?.remove();
+  const el = document.createElement('div');
+  el.id = 'moller';
+  el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '<div class="mol-rays"></div><div class="mol-card"><img src="assets/moller.jpg" alt=""><div class="mol-text">En MÖLLER!!!</div></div>';
+  document.body.appendChild(el);
+  try { navigator.vibrate?.([80, 40, 80, 40, 160]); } catch {}
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 350); }, 2300);
 }
 // Stor animation när någon får tröja eller byxa.
 function celebrate(kind, who) {
