@@ -1,13 +1,15 @@
 import { store, isShared, DEFAULT_HOME } from './store.js';
 import {
   newMatch, applyTurn, evalDarts, undo, canUndo, legInfo, legsWon,
-  checkoutRoutes, currentLeg, effective, uid, specialVisit, replacePlayer,
+  checkoutRoutes, currentLeg, effective, uid, specialVisit, replacePlayer, dartFromLabel,
 } from './game.js';
 import { playerStats, matchSummary, matchHits } from './stats.js';
 
 // ---------- hjälpare ----------
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Etiketten lagras som S20/D18/T5, men singlar visas bara som siffran.
+const dl = (l) => (/^S\d+$/.test(l) ? l.slice(1) : l);
 const fmt1 = (n) => (n ? n.toFixed(1).replace('.', ',') : '–');
 const fmtDate = (iso) => new Date(iso).toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const fmtDay = (iso) => new Date(iso).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -332,7 +334,7 @@ function hintHtml(m, rem, dartsLeft) {
   if (rem > max || rem < 2) return '<div class="hint empty-hint"></div>';
   const routes = checkoutRoutes(rem, dartsLeft, m.outRule);
   if (!routes.length) return `<div class="hint none">Inget avslut på ${rem} med ${dartsLeft === 1 ? 'en pil' : dartsLeft + ' pilar'}</div>`;
-  const lab = (l) => `<b class="k${l === 'Bull' ? 'B' : /^\d/.test(l) ? 'S' : l[0]}">${l}</b>`;
+  const lab = (l) => `<b class="k${l === 'Bull' ? 'B' : /^\d/.test(l) ? 'S' : l[0]}">${dl(l)}</b>`;
   return `<div class="hint"><span class="hl">Avslut på ${rem}</span>${routes.map((r) => `<span class="route">${r.map(lab).join('<i>›</i>')}</span>`).join('')}</div>`;
 }
 const dartLabel = (n, mult) => (mult === 3 ? 'T' : mult === 2 ? 'D' : 'S') + n;
@@ -355,12 +357,12 @@ function viewMatch(id) {
     const d = turns.reduce((a, x) => a + x.d, 0);
     let boxes, total = '';
     if (isCur) {
-      boxes = [0, 1, 2].map((k) => { const dd = S.darts[k]; return `<span class="db ${dd ? 'has' : ''}">${dd ? dd.l : ''}</span>`; }).join('');
+      boxes = [0, 1, 2].map((k) => { const dd = S.darts[k]; return `<span class="db ${dd ? 'has' : ''}">${dd ? dl(dd.l) : ''}</span>`; }).join('');
       total = S.darts.length ? (r.state === 'bust' ? '<s>' + r.sum + '</s> bust' : r.sum) : '';
     } else {
       const last = turns[turns.length - 1];
       const ds = last?.ds || (last ? [String(last.s)] : []);
-      boxes = [0, 1, 2].map((k) => `<span class="db past ${ds[k] ? 'has' : ''}">${ds[k] ?? ''}</span>`).join('');
+      boxes = [0, 1, 2].map((k) => `<span class="db past ${ds[k] ? 'has' : ''}">${ds[k] ? dl(ds[k]) : ''}</span>`).join('');
       total = last ? (last.bust ? '<s>' + last.s + '</s> bust' : last.s) : '';
     }
     const shown = isCur ? r.left : info.rem[i];
@@ -447,7 +449,14 @@ function undoDart() {
   const m = getMatch(route().id);
   if (S.timer) { clearTimeout(S.timer); S.timer = null; S.locked = false; S.darts.pop(); return; }
   if (S.darts.length) { S.darts.pop(); return; }
-  if (m && canUndo(m)) { saveMatch(undo(m)); toast('Senaste rundan ångrad'); }
+  if (!m || !canUndo(m)) return;
+  // Ta tillbaka rundan, men bara sista pilen ska försvinna: de övriga pilarna ligger kvar att fortsätta från.
+  const leg = [...m.legs].reverse().find((l) => l.turns.length);
+  const last = leg.turns[leg.turns.length - 1];
+  S.darts = last.ds && last.ds.length ? last.ds.slice(0, -1).map(dartFromLabel) : [];
+  S.mult = 1;
+  saveMatch(undo(m));
+  toast('Senaste pilen ångrad');
 }
 function commit(next) {
   const wasLeg = legsWon(getMatch(next.id));
@@ -517,7 +526,7 @@ function viewMatchDone(m) {
     const rows = leg.turns.map((t) => {
       if (t.co) rem[t.t] = 0; else if (!t.bust) rem[t.t] -= t.s;
       const who = m.teams[t.t].players.find((p) => p.id === t.p);
-      return `<tr><td>${esc(playerName(t.p, who?.name))}${t.ds ? `<div class="small muted">${t.ds.join(' · ')}${specialVisit(t.ds) ? ` <b class="sp">${specialVisit(t.ds) === 'tröja' ? '👕 tröja' : '👖 byxa'}</b>` : ''}</div>` : ''}</td><td class="num ${t.bust ? 'muted' : ''}">${t.bust ? `<s>${t.s}</s> bust` : t.s}</td><td class="num">${rem[t.t]}</td></tr>`;
+      return `<tr><td>${esc(playerName(t.p, who?.name))}${t.ds ? `<div class="small muted">${t.ds.map(dl).join(' · ')}${specialVisit(t.ds) ? ` <b class="sp">${specialVisit(t.ds) === 'tröja' ? '👕 tröja' : '👖 byxa'}</b>` : ''}</div>` : ''}</td><td class="num ${t.bust ? 'muted' : ''}">${t.bust ? `<s>${t.s}</s> bust` : t.s}</td><td class="num">${rem[t.t]}</td></tr>`;
     }).join('');
     return `<details ${li === m.legs.length - 1 ? 'open' : ''}><summary><b>Leg ${li + 1}</b> – ${leg.winner != null ? esc(m.teams[leg.winner].name) + ' vann' : 'ej klart'}</summary>
       <table class="turns"><thead><tr><th>Spelare</th><th class="num">Poäng</th><th class="num">Kvar</th></tr></thead><tbody>${rows}</tbody></table></details>`;
@@ -529,7 +538,7 @@ function viewMatchDone(m) {
     <div class="row" style="margin:1rem 0">
       <button class="btn" data-act="rematch" data-id="${m.id}">Spela igen</button>
       <button class="btn ghost" data-act="editplayers">✎ Byt spelare</button>
-      <button class="btn ghost" data-act="undo">↶ Ångra sista kastet</button>
+      <button class="btn ghost" data-act="undo">↶ Ångra sista pilen</button>
       <button class="btn ghost" data-act="delete" data-id="${m.id}">Ta bort match</button></div>
     <div class="card tablewrap"><table><thead><tr><th>Lag</th><th class="num">Legs</th><th class="num">Snitt</th><th class="num">Högsta</th><th class="num">180</th></tr></thead><tbody>
       ${m.teams.map((t, i) => `<tr><td>${esc(t.name)}</td><td class="num">${w[i]}</td><td class="num">${fmt1(sum[i].avg)}</td><td class="num">${sum[i].high}</td><td class="num">${sum[i].n180}</td></tr>`).join('')}</tbody></table></div>
@@ -705,11 +714,7 @@ document.addEventListener('click', async (e) => {
     case 'dart': addDart(+v); return;
     case 'miss': addDart(0); return;
     case 'kundo': undoDart(); break;
-    case 'undo': {
-      const m = getMatch(route().id);
-      if (m && canUndo(m)) { S.darts = []; saveMatch(undo(m)); toast('Senaste rundan ångrad'); return; }
-      break;
-    }
+    case 'undo': undoDart(); return;
     case 'abort': case 'delete':
       if (confirm(a === 'abort' ? 'Avbryta och ta bort den här matchen?' : 'Ta bort matchen och dess statistik för alla?')) {
         const id = el.dataset.id;

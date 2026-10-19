@@ -148,3 +148,22 @@ tm = applyTurn(tm, 'ok', 26, 3, ['S20', 'S5', 'S1']);
 const t2 = replacePlayer(tm, 'b', { id: 'e', name: 'Eva' });
 assert.equal(t2.teams[0].name, 'Anna & Eva');
 console.log('byt spelare OK');
+import { dartFromLabel } from '../js/game.js';
+assert.deepEqual(dartFromLabel('T20'), { v: 60, dbl: false, l: 'T20' });
+assert.deepEqual(dartFromLabel('D18'), { v: 36, dbl: true, l: 'D18' });
+assert.deepEqual(dartFromLabel('S5'), { v: 5, dbl: false, l: 'S5' });
+assert.deepEqual(dartFromLabel('Bull'), { v: 50, dbl: true, l: 'Bull' });
+assert.deepEqual(dartFromLabel('Miss'), { v: 0, dbl: false, l: 'Miss' });
+// ångra en pil: rundan öppnas igen med de pilar som fanns före den sista
+{
+  let u = newMatch({ mode: 101, outRule: 'straight', legsToWin: 1, teams: [{ name: 'Anna', players: [A] }, { name: 'Bo', players: [B] }] });
+  u = applyTurn(u, 'ok', 41, 3, ['S20', 'S20', 'S1']);
+  const last = u.legs[0].turns.at(-1);
+  const back = undo(u);
+  const restored = last.ds.slice(0, -1).map(dartFromLabel);
+  assert.equal(back.legs[0].turns.length, 0);
+  assert.deepEqual(restored.map((d) => d.l), ['S20', 'S20']);
+  assert.equal(evalDarts(101, restored, 'straight').state, 'open');
+  assert.equal(legInfo(back).next.team, 0);
+}
+console.log('ångra-pil OK');

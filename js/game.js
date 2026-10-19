@@ -265,3 +265,12 @@ export function replacePlayer(m, fromId, to) {
   c.rev = (c.rev || 0) + 1;
   return c;
 }
+
+/** Bygger tillbaka en pil från dess etikett (S20, D18, T5, 25, Bull, Miss). */
+export function dartFromLabel(l) {
+  if (l === 'Miss') return { v: 0, dbl: false, l };
+  if (l === 'Bull') return { v: 50, dbl: true, l };
+  if (l === '25') return { v: 25, dbl: false, l };
+  const mult = { S: 1, D: 2, T: 3 }[l[0]];
+  return { v: +l.slice(1) * mult, dbl: l[0] === 'D', l };
+}
