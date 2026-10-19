@@ -402,3 +402,11 @@ b.sp { color: var(--accent); }
 @keyframes molshake { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg) scale(1.04); } }
 @keyframes moltext { from { transform: rotate(-3deg) scale(1); } to { transform: rotate(2deg) scale(1.08); } }
 @media (prefers-reduced-motion: reduce) { .mol-rays, .mol-card, .mol-card img, .mol-text { animation: none; } }
+
+/* ↻ uppdatera */
+.iconbtn { background: none; border: 1.5px solid var(--ink); border-radius: var(--radius); min-width: 38px; min-height: 38px; font-size: 1.2rem; line-height: 1; color: var(--ink); }
+.iconbtn:active { background: var(--ink); color: var(--cream); }
+.top { gap: .5rem; }
+@media (max-width: 759px) { #homebar { margin-left: auto; } }
+#homebar:empty + #reload { margin-left: auto; }
+@media (min-width: 760px) { .top { justify-content: flex-start; } .nav { margin-left: auto; } #homebar, #reload { margin-left: .8rem; } #homebar:empty + #reload { margin-left: .8rem; } }

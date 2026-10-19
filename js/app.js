@@ -803,6 +803,17 @@ document.addEventListener('keydown', (e) => {
   render();
 });
 
+// ↻ Hämtar senaste versionen av appen (viktigt för appen på hemskärmen, som saknar uppdatera-knapp).
+$('#reload').addEventListener('click', async () => {
+  toast('Uppdaterar…');
+  try {
+    const regs = await navigator.serviceWorker?.getRegistrations?.();
+    await Promise.all((regs || []).map((r) => r.unregister()));
+    await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+  } catch {}
+  location.reload();
+});
+
 // ---------- start ----------
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
