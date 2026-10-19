@@ -1,5 +1,5 @@
 // Cachar appskalet så att appen startar direkt och även utan nät. Data hämtas alltid från nätet.
-const CACHE = 'ci-darts-v13';
+const CACHE = 'ci-darts-v14';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/game.js', 'js/stats.js', 'js/store.js', 'js/config.js', 'icons/icon.svg', 'assets/moller.jpg', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -13,7 +13,7 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   // Nätet först (så uppdateringar syns), cache som reserv.
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(e.request, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(e.request, copy));
       return res;

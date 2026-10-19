@@ -5,6 +5,9 @@ import {
 } from './game.js';
 import { playerStats, matchSummary, matchHits } from './stats.js';
 
+// Versionsnummer som visas längst ner på startsidan (håll i takt med CACHE i sw.js).
+const VERSION = '14';
+
 // ---------- hjälpare ----------
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -183,7 +186,8 @@ function viewHome() {
         ${top.map(({ p, s }) => `<tr class="click" data-go="#/spelare/${p.id}"><td>${esc(p.name)}</td><td class="num">${s.wins}/${s.matches}</td><td class="num">${fmt1(s.avg)}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="card empty">Spela en match så dyker topplistan upp här.</div>'}
       <p><a class="link" href="#/spelare">Alla spelare →</a></p>
-    </section></div>`;
+    </section></div>
+  <p class="small muted" style="margin-top:2rem">Version ${VERSION} · tryck ↻ uppe till höger för att hämta senaste</p>`;
 }
 
 // ----- Ny match -----
