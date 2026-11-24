@@ -25,12 +25,25 @@ export function newMatch({ mode, outRule, legsToWin, teams }) {
     outRule, // 'double' | 'straight'
     legsToWin,
     teams,
-    legs: [{ starter: 0, turns: [], winner: null }],
+    legs: [{ starter: 0, start: 0, turns: [], winner: null }],
     winner: null,
   };
 }
 
 export const currentLeg = (m) => m.legs[m.legs.length - 1];
+
+/**
+ * Kastordningen över hela matchen: lag 1 spelare 1, lag 2 spelare 1, lag 1 spelare 2, lag 2 spelare 2 …
+ * Varje leg börjar på en ny plats i den här listan, så att även startkastet går runt mellan spelarna.
+ * Returnerar null om lagen är olika stora (då gäller den gamla regeln).
+ */
+export function throwingOrder(m) {
+  const size = m.teams[0].players.length;
+  if (m.teams.some((t) => t.players.length !== size)) return null;
+  const seq = [];
+  for (let r = 0; r < size; r++) m.teams.forEach((t, team) => seq.push({ team, player: t.players[r] }));
+  return seq;
+}
 
 export function legInfo(m, leg = currentLeg(m)) {
   const n = m.teams.length;
@@ -42,6 +55,12 @@ export function legInfo(m, leg = currentLeg(m)) {
     else if (!t.bust) rem[t.t] -= t.s;
   }
   const i = leg.turns.length;
+  const seq = leg.start != null ? throwingOrder(m) : null;
+  if (seq) {
+    const e = seq[(leg.start + i) % seq.length];
+    return { rem, darts, next: { team: e.team, player: e.player } };
+  }
+  // Äldre leg (utan start) och olika stora lag: det lag som börjar kastar med sin första spelare först.
   const team = (leg.starter + i) % n;
   const members = m.teams[team].players;
   const player = members[Math.floor(i / n) % members.length];
@@ -116,11 +135,14 @@ export function applyTurn(m, kind, s, darts = 3, ds) {
       c.winner = next.team;
       c.finished_at = new Date().toISOString();
     } else {
-      c.legs.push({
-        starter: (c.legs[0].starter + c.legs.length) % c.teams.length,
-        turns: [],
-        winner: null,
-      });
+      const seq = throwingOrder(c);
+      if (seq) {
+        // Nästa leg börjar en plats längre fram i kastordningen (2 mot 2: varannan gång börjar den andra spelaren i laget).
+        const start = ((c.legs[0].start ?? c.legs[0].starter) + c.legs.length) % seq.length;
+        c.legs.push({ starter: seq[start].team, start, turns: [], winner: null });
+      } else {
+        c.legs.push({ starter: (c.legs[0].starter + c.legs.length) % c.teams.length, turns: [], winner: null });
+      }
     }
   }
   c.rev = (c.rev || 0) + 1;

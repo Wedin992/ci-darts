@@ -167,3 +167,40 @@ assert.deepEqual(dartFromLabel('Miss'), { v: 0, dbl: false, l: 'Miss' });
   assert.equal(legInfo(back).next.team, 0);
 }
 console.log('ångra-pil OK');
+// 2 mot 2: startkastet ska gå runt mellan alla fyra spelare, inte alltid samma i det lag som börjar
+{
+  const E = { id: 'e', name: 'Eva' };
+  let m = newMatch({ mode: 101, outRule: 'straight', legsToWin: 5,
+    teams: [{ name: 'Anna & Cia', players: [A, C] }, { name: 'Bo & Dan', players: [B, D] }] });
+  const who = (x) => legInfo(x).next.player.id;
+  const order = (x, n) => { const o = []; for (let i = 0; i < n; i++) { o.push(who(x)); x = applyTurn(x, 'ok', 10, 3, ['S10', 'Miss', 'Miss']); } return o; };
+  assert.deepEqual(order(m, 4), ['a', 'b', 'c', 'd']);              // leg 1
+  const finishLeg = (x) => { // låt alltid den som står på tur checka ut 101 direkt (rak ut)
+    x = applyTurn(x, 'ok', 60, 3); x = applyTurn(x, 'ok', 20, 3); x = applyTurn(x, 'ok', 20, 3); x = applyTurn(x, 'ok', 20, 3);
+    return applyTurn(x, 'checkout', 41, 1, ['S20', 'S21'].slice(0, 1));
+  };
+  const starters = [];
+  for (let leg = 0; leg < 5; leg++) {
+    starters.push(who(m));
+    const before = m.legs.length;
+    m = finishLeg(m);
+    if (m.status === 'finished') break;
+    assert.equal(m.legs.length, before + 1);
+  }
+  assert.deepEqual(starters.slice(0, 4), ['a', 'b', 'c', 'd']);     // varje spelare börjar ett leg, i tur och ordning
+  assert.equal(starters[4], 'a');                                    // och sedan börjar rundan om
+  // ordningen inom ett leg som börjar på Bo: B, C, D, A
+  let m2 = newMatch({ mode: 101, outRule: 'straight', legsToWin: 5,
+    teams: [{ name: 'x', players: [A, C] }, { name: 'y', players: [B, D] }] });
+  m2.legs[0].start = 1; m2.legs[0].starter = 1;
+  assert.deepEqual(order(m2, 4), ['b', 'c', 'd', 'a']);
+  // soloaktiga matcher oförändrade: tre spelare roterar som förut
+  let s3 = newMatch({ mode: 101, outRule: 'straight', legsToWin: 3, teams: [A, B, C].map((p) => ({ name: p.name, players: [p] })) });
+  const t3 = []; for (let leg = 0; leg < 3; leg++) { t3.push(legInfo(s3).next.team); s3 = applyTurn(applyTurn(applyTurn(applyTurn(s3, 'ok', 20), 'ok', 20), 'ok', 20), 'checkout', 101 - 20, 1); }
+  assert.deepEqual(t3, [0, 1, 2]);
+  // äldre leg utan "start" beter sig som förut
+  let old = newMatch({ mode: 101, outRule: 'straight', legsToWin: 2, teams: [{ name: 'x', players: [A, C] }, { name: 'y', players: [B, D] }] });
+  delete old.legs[0].start;
+  assert.deepEqual(order(old, 4), ['a', 'b', 'c', 'd']);
+}
+console.log('startordning mellan legs OK');

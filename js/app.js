@@ -6,7 +6,7 @@ import {
 import { playerStats, matchSummary, matchHits } from './stats.js';
 
 // Versionsnummer som visas längst ner på startsidan (håll i takt med CACHE i sw.js).
-const VERSION = '14';
+const VERSION = '15';
 
 // ---------- hjälpare ----------
 const $ = (s) => document.querySelector(s);
